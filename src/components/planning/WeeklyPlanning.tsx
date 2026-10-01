@@ -10,7 +10,11 @@ import {WEEKDAYS, weekdayFromDate} from "@/server/domain/planning/days";
 import {parseTimeToMinutes} from "@/server/domain/planning/time";
 import {lunchBreakOf} from "@/server/domain/planning/lunchBreak";
 import {isCurrentWeek, isFrozen, sessionPartsOf} from "@/server/domain/planning/partial";
-import DayTimeline, {DayItems} from "@/components/planning/DayTimeline";
+import DayTimeline, {DayItems, SlotFocus} from "@/components/planning/DayTimeline";
+import {canFocus, isFocusOn, targetOf} from "@/server/domain/focus/target";
+import {useFocus} from "@/components/focus/focusStore";
+import {useFocusLauncher} from "@/components/focus/SwitchFocusDialog";
+import {useRouter} from "next/navigation";
 import GenerateButton from "@/components/planning/GenerateButton";
 import {useWeek} from "@/components/planning/useWeek";
 import Spinner from "@/components/uiComponents/Spinner";
@@ -105,6 +109,9 @@ export default function WeeklyPlanning() {
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
     const [noteOpen, setNoteOpen] = useState(false);
     const [hidden, setHidden] = useState<Partial<Record<Dismissable, string>>>({});
+    const focusState = useFocus().state;
+    const focusLauncher = useFocusLauncher();
+    const router = useRouter();
 
     if (!loaded) {
         return (
@@ -188,6 +195,18 @@ export default function WeeklyPlanning() {
                 reload();
             });
     }
+
+    /** Le ▶ des créneaux du jour : lancer un focus, ou rouvrir celui qui tourne. */
+    const activeFocus = focusState && focusState.status !== "finished" ? focusState : null;
+    const focus: SlotFocus = {
+        canFocus: (slot) => planning !== null && canFocus(slot, planning, today),
+        isFocused: (slot) => isFocusOn(activeFocus?.target, slot),
+        onFocus: (slot) => {
+            if (!planning || generating) return;
+            if (isFocusOn(activeFocus?.target, slot)) router.push("/focus");
+            else focusLauncher.launch(targetOf(slot, planning));
+        },
+    };
 
     const title = (
         <div className="flex flex-wrap items-baseline gap-x-3.5">
@@ -335,6 +354,7 @@ export default function WeeklyPlanning() {
 
     return (
         <>
+            {focusLauncher.dialog}
             {/* Bureau */}
             <div className="hidden flex-col gap-4 xl:flex">
                 <div className="flex items-stretch gap-5">
@@ -359,7 +379,7 @@ export default function WeeklyPlanning() {
                     {days.map((d) =>
                         <DayTimeline key={d.day} day={d.day} label={d.label} date={d.date} isToday={d.isToday}
                                      slots={d.slots} seed={planning._id} lunch={lunch} priorityOf={priorityOf} onToggle={toggle}
-                                     canLock={canLock} onLock={lock} disabled={generating}/>
+                                     canLock={canLock} onLock={lock} focus={focus} disabled={generating}/>
                     )}
                 </div>
             </div>
@@ -403,7 +423,8 @@ export default function WeeklyPlanning() {
                     </div>
                     <div className="-mt-0.5">{legend}</div>
                     <DayItems slots={selected.slots} day={selected.day} seed={planning._id} lunch={lunch}
-                              priorityOf={priorityOf} onToggle={toggle} canLock={canLock} onLock={lock} disabled={generating} large/>
+                              priorityOf={priorityOf} onToggle={toggle} canLock={canLock} onLock={lock} focus={focus}
+                              disabled={generating} large/>
                     {selected.slots.length === 0 &&
                         <div className="ital px-0.5 py-2 text-xl text-muted">Journée libre.</div>
                     }

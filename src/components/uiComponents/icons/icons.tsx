@@ -76,3 +76,44 @@ export function ListIcon(props: IconProps) {
 export function CircleCheckIcon(props: IconProps) {
     return <Svg {...props}><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></Svg>;
 }
+
+/** Bouton « Focus » de l'en-tête. */
+export function TimerIcon(props: IconProps) {
+    return <Svg {...props}><circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.2 1.6"/><path d="M9.5 2.5h5"/></Svg>;
+}
+
+export function PlayIcon(props: IconProps) {
+    return <Svg {...props}><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></Svg>;
+}
+
+export function PauseIcon(props: IconProps) {
+    return (
+        <Svg {...props}>
+            <rect x="6.5" y="5" width="3.5" height="14" rx="1" fill="currentColor"/>
+            <rect x="14" y="5" width="3.5" height="14" rx="1" fill="currentColor"/>
+        </Svg>
+    );
+}
+
+export function StopIcon(props: IconProps) {
+    return <Svg {...props}><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></Svg>;
+}
+
+/** « Passer » : aller à la phase suivante. */
+export function SkipIcon(props: IconProps) {
+    return <Svg {...props}><path d="M6 6l9 6-9 6z" fill="currentColor"/><path d="M18.5 6v12"/></Svg>;
+}
+
+/** La pause du minuteur. */
+export function CupIcon(props: IconProps) {
+    return (
+        <Svg {...props}>
+            <path d="M5 9h11v4.5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/>
+            <path d="M8.5 3.5v2.5"/><path d="M12.5 3.5v2.5"/>
+        </Svg>
+    );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+    return <Svg {...props}><path d="M6 9l6 6 6-6"/></Svg>;
+}
