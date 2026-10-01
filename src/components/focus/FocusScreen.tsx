@@ -15,6 +15,8 @@ import FocusLauncher from "@/components/focus/FocusLauncher";
 import CycleDots from "@/components/focus/CycleDots";
 import CycleList, {PHASE_LABEL} from "@/components/focus/CycleList";
 import PhaseEnd from "@/components/focus/PhaseEnd";
+import {formatSlotTime} from "@/components/planning/DayTimeline";
+import {priorityStyle} from "@/components/uiComponents/priority";
 
 /** Une phrase pour chaque pause, choisie par le numéro du pomodoro. */
 const BREAK_IDEAS = [
@@ -50,10 +52,25 @@ function Digits({state, now, className}: { state: FocusState, now: number, class
 
 function Heading({state, centered}: { state: FocusState, centered?: boolean }) {
     const name = focusName(state);
+    const {target} = state;
+    const onBreak = currentPhase(state) !== "work";
+    const eyebrow = target.kind === "free" ? "Focus libre" : centered ? "Sur ton créneau" : "Focus sur un créneau";
     return (
         <div className={`flex flex-col gap-0.5 ${centered ? "items-center text-center" : ""}`}>
-            <span className={`eyebrow ${currentPhase(state) !== "work" ? "text-ink" : ""}`}>Focus libre</span>
-            {name && <h1 className={`m-0 font-extrabold ${centered ? "text-2xl leading-7 tracking-[-0.5px]" : "text-[34px] leading-[38px] tracking-[-0.8px]"}`}>{name}</h1>}
+            <span className={`eyebrow ${onBreak ? "text-ink" : ""}`}>{eyebrow}</span>
+            {name &&
+                <div className={`flex items-center ${centered ? "mt-1 gap-2" : "mt-2 gap-3"}`}>
+                    {target.kind === "slot" &&
+                        <span aria-hidden="true" className={`shrink-0 rounded-full ${priorityStyle(target.priority).dotBg} ${centered ? "size-2.5" : "size-3"}`}/>}
+                    <h1 className={`m-0 font-extrabold ${centered ? "text-2xl leading-7 tracking-[-0.5px]" : "text-[34px] leading-[38px] tracking-[-0.8px]"}`}>{name}</h1>
+                </div>
+            }
+            {target.kind === "slot" &&
+                <span className={`text-[15px] ${onBreak ? "text-ink" : "text-muted"} ${centered ? "text-sm" : "mt-1 pl-6"}`}>
+                    Aujourd’hui · {formatSlotTime({startTime: target.startTime, endTime: target.endTime})}
+                    {!centered && ` · priorité ${priorityStyle(target.priority).label.toLowerCase()}`}
+                </span>
+            }
         </div>
     );
 }

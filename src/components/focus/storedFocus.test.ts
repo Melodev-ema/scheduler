@@ -18,6 +18,15 @@ describe('parseStoredFocus', () => {
         expect(parseStoredFocus(JSON.stringify(onBreak), T0)).toEqual(onBreak);
     });
 
+    it('relit un focus sur un créneau', () => {
+        const slot = {
+            kind: 'slot' as const, planningId: 'p1', slotId: 's1', day: 'jeudi',
+            startTime: '09:30', endTime: '11:30', activity: 'Portfolio', priority: 1,
+        };
+        const state = {...stop(startFocus(slot, T0), T0 + 30 * MINUTE_MS), resolved: true};
+        expect(parseStoredFocus(JSON.stringify(state), T0)).toEqual(state);
+    });
+
     it('ignore une valeur absente, vide ou cassée', () => {
         expect(parseStoredFocus(null, T0)).toBeNull();
         expect(parseStoredFocus('', T0)).toBeNull();

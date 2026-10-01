@@ -27,7 +27,22 @@ export interface FreeTarget {
     subject: string;
 }
 
-export type FocusTarget = FreeTarget;
+/**
+ * Un focus sur un créneau du jour : de quoi l'afficher sans recharger le
+ * planning, et de quoi le cocher à la fin (`planningId`, `slotId`).
+ */
+export interface SlotTarget {
+    kind: 'slot';
+    planningId: string;
+    slotId: string;
+    day: string;
+    startTime: string;
+    endTime: string;
+    activity: string;
+    priority: number;
+}
+
+export type FocusTarget = FreeTarget | SlotTarget;
 
 export type PhaseKind = 'work' | 'shortBreak' | 'longBreak';
 
@@ -59,6 +74,8 @@ export interface FocusState {
     pausedRemainingMs?: number;
     completed: CompletedPhase[];
     finishedAt?: number;
+    /** Focus sur un créneau, fini : la question « marquer comme fait ? » a eu sa réponse. */
+    resolved?: boolean;
 }
 
 /** Travail, pause, travail… la dernière pause est longue. */

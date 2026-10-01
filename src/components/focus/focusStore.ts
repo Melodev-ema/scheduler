@@ -150,9 +150,9 @@ export function clockOf(timestamp: number): string {
     return formatClock(date.getHours() * 60 + date.getMinutes());
 }
 
-/** Ce sur quoi porte le focus : le sujet, s'il y en a un. */
+/** Ce sur quoi porte le focus : le créneau, ou le sujet s'il y en a un. */
 export function focusName(state: FocusState): string {
-    return state.target.subject.trim();
+    return state.target.kind === "slot" ? state.target.activity : state.target.subject.trim();
 }
 
 /** Un focus actif ne s'écrase jamais : la bascule passe par `replaceFocus`. */

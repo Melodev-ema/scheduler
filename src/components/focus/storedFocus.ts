@@ -11,7 +11,19 @@ const settingsSchema = z.object({
     pomodoros: z.number().int().min(1).max(12),
 });
 
-const targetSchema = z.object({kind: z.literal('free'), subject: z.string()});
+const targetSchema = z.discriminatedUnion('kind', [
+    z.object({kind: z.literal('free'), subject: z.string()}),
+    z.object({
+        kind: z.literal('slot'),
+        planningId: z.string(),
+        slotId: z.string(),
+        day: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+        activity: z.string(),
+        priority: z.number(),
+    }),
+]);
 
 const completedSchema = z.object({
     index: z.number().int().min(0),
@@ -32,6 +44,7 @@ const stateSchema = z.object({
     pausedRemainingMs: z.number().min(0).optional(),
     completed: z.array(completedSchema),
     finishedAt: z.number().optional(),
+    resolved: z.boolean().optional(),
 });
 
 /**

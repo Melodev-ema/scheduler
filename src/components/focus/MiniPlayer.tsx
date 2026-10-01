@@ -27,7 +27,7 @@ export function useActiveFocus() {
 }
 
 function Strip({state, now}: { state: FocusState, now: number }) {
-    if (state.status === "awaiting") return null;
+    if (state.status === "awaiting" || state.status === "finished") return null;
     return (
         <progress
             aria-hidden="true"
@@ -63,13 +63,13 @@ function Summary({state, now, large}: { state: FocusState, now: number, large?: 
     const left = remainingMs(state, now);
     return (
         <Link href="/focus"
-              aria-label={`Ouvrir le minuteur, ${name}${state.status === "awaiting" ? "" : `, ${describeTimer(left)}`}`}
+              aria-label={`Ouvrir le minuteur, ${name}${state.status === "awaiting" || state.status === "finished" ? "" : `, ${describeTimer(left)}`}`}
               className={`flex h-full min-w-0 items-center text-inherit no-underline ${large ? "grow gap-3" : "gap-4"}`}>
             <span className={`flex min-w-0 flex-col gap-px ${large ? "grow" : ""}`}>
                 <span className="eyebrow truncate text-line">{eyebrowOf(state)}</span>
                 <span className={`truncate font-bold ${large ? "text-[15px] leading-[19px]" : "max-w-[180px] text-sm leading-[18px]"}`}>{name}</span>
             </span>
-            {state.status !== "awaiting" &&
+            {state.status !== "awaiting" && state.status !== "finished" &&
                 <span className={`serif text-[30px] leading-8 tabular-nums ${state.status === "paused" ? "opacity-55" : ""}`}>
                     {formatTimer(left)}
                 </span>
