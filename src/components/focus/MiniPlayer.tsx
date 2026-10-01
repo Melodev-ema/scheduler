@@ -7,9 +7,11 @@ import {currentPhase, FocusState, pomodoroNumber, remainingMs} from "@/server/do
 import {
     describeTimer, focusName, formatTimer, nextPhase, pauseFocus, resumeFocus, useFocus,
 } from "@/components/focus/focusStore";
+import {needsMarkDone} from "@/components/focus/MarkDoneDialog";
 
 /** Le sur-titre : où en est le cycle, en quelques mots. */
 function eyebrowOf(state: FocusState): string {
+    if (state.status === "finished") return "Créneau terminé";
     const step = `${pomodoroNumber(state)} sur ${state.settings.pomodoros}`;
     const work = currentPhase(state) === "work";
     if (state.status === "awaiting") return work ? `Pomodoro ${pomodoroNumber(state)} fait` : "Pause finie";
@@ -22,7 +24,8 @@ function eyebrowOf(state: FocusState): string {
 export function useActiveFocus() {
     const {state, now} = useFocus();
     const pathname = usePathname();
-    const active = state && state.status !== "finished" && pathname !== "/focus" ? state : null;
+    // Un focus sur créneau fini reste affiché tant que « marquer comme fait ? » attend sa réponse.
+    const active = state && (state.status !== "finished" || needsMarkDone(state)) && pathname !== "/focus" ? state : null;
     return {state: active, now};
 }
 
@@ -39,6 +42,14 @@ function Strip({state, now}: { state: FocusState, now: number }) {
 }
 
 function Action({state}: { state: FocusState }) {
+    if (state.status === "finished") {
+        return (
+            <Link href="/focus"
+                  className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-butter px-4 text-sm font-bold text-ink no-underline">
+                Le cocher ?
+            </Link>
+        );
+    }
     if (state.status === "awaiting") {
         const work = currentPhase(state) === "work";
         return (

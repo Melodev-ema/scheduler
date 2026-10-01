@@ -183,6 +183,9 @@ export const skipFocusBreak = () => update(skipBreak);
 export const skipFocusPhase = () => update(skipPhase);
 export const extendFocusBreak = () => update((state, now) => extendBreak(state, now));
 
+/** La question de fin a eu sa réponse : on ne la repose plus. */
+export const resolveFocus = () => update((state) => ({...state, resolved: true}));
+
 export function clearFocus() {
     set(null);
 }

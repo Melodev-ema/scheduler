@@ -15,6 +15,7 @@ import FocusLauncher from "@/components/focus/FocusLauncher";
 import CycleDots from "@/components/focus/CycleDots";
 import CycleList, {PHASE_LABEL} from "@/components/focus/CycleList";
 import PhaseEnd from "@/components/focus/PhaseEnd";
+import MarkDoneDialog, {needsMarkDone} from "@/components/focus/MarkDoneDialog";
 import {formatSlotTime} from "@/components/planning/DayTimeline";
 import {priorityStyle} from "@/components/uiComponents/priority";
 
@@ -215,6 +216,7 @@ export default function FocusScreen() {
 
     return (
         <>
+            {needsMarkDone(state) && <MarkDoneDialog state={state}/>}
             {/* Bureau */}
             <div className={`hidden rounded-[28px] border px-14 pt-11 pb-12 md:block ${onBreak ? "border-butter bg-butter" : "border-line"}`}>
                 <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-14">
