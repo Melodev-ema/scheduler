@@ -187,7 +187,7 @@ function Done({state, onReduce}: { state: FocusState, onReduce: () => void }) {
     const done = pomodorosDone(state);
     const name = focusName(state);
     return (
-        <div className="flex grow flex-col items-center pt-[70px] text-center md:pt-6">
+        <div className="flex grow flex-col items-center pt-[70px] text-center md:grow-0 md:pt-0">
             <CycleDots state={state} size={34}/>
             <span className="ital mt-[18px] text-[44px] leading-12">Fini.</span>
             <span className="mt-2 text-xl font-extrabold">
@@ -196,7 +196,7 @@ function Done({state, onReduce}: { state: FocusState, onReduce: () => void }) {
             <span className="mt-1 text-[15px] text-muted">
                 {name ? `${name} · ` : ""}{done} pomodoro{done > 1 ? "s" : ""} sur {state.settings.pomodoros}
             </span>
-            <div className="mt-auto flex w-full max-w-[400px] flex-col gap-2.5 pt-10 pb-8 md:pb-0">
+            <div className="mt-auto flex w-full max-w-[400px] flex-col gap-2.5 pt-10 pb-8 md:mt-0 md:pb-0">
                 <BaseButton size="large" className="w-full" onClick={clearFocus}>Nouveau focus</BaseButton>
                 <BaseButton theme="link" className="w-full" onClick={() => {
                     clearFocus();
@@ -228,8 +228,9 @@ export default function FocusScreen() {
         <>
             {needsMarkDone(state) && <MarkDoneDialog state={state}/>}
             {/* Bureau */}
-            <div className={`hidden rounded-[28px] border px-14 pt-11 pb-12 md:block ${onBreak ? "border-butter bg-butter" : "border-line"}`}>
-                <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-14">
+            {/* Toute la hauteur sous l'en-tête : 94 px d'en-tête, 32 px de marge basse de <main>. */}
+            <div className={`hidden min-h-[calc(100dvh-126px)] flex-col rounded-[28px] border px-14 pt-11 pb-12 md:flex ${onBreak ? "border-butter bg-butter" : "border-line"}`}>
+                <div className="grid grow grid-cols-[minmax(0,1fr)_360px] gap-14">
                     <div className="flex min-w-0 flex-col">
                         <div className="flex items-start justify-between gap-4">
                             <Heading state={state}/>
@@ -238,8 +239,8 @@ export default function FocusScreen() {
                             </BaseButton>
                         </div>
                         {slotOver && <div className="mt-8">{slotOver}</div>}
-                        {timer?.desktop}
-                        {body && <div className="flex min-h-[460px] flex-col">{body}</div>}
+                        {timer && <div className="flex grow flex-col justify-center pb-6">{timer.desktop}</div>}
+                        {body && <div className="flex grow flex-col justify-center">{body}</div>}
                     </div>
                     <CycleList state={state}/>
                 </div>

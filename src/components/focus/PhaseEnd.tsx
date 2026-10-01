@@ -22,8 +22,8 @@ export default function PhaseEnd({state, now}: { state: FocusState, now: number 
         const breakMinutes = next ? phaseMinutes(state.settings, next) : 0;
         const minutes = Math.round(focusMinutes(state));
         return (
-            <div className="flex grow flex-col items-center text-center">
-                <div className="flex flex-col items-center gap-2.5 pt-[70px] md:pt-6">
+            <div className="flex grow flex-col items-center text-center md:grow-0">
+                <div className="flex flex-col items-center gap-2.5 pt-[70px] md:pt-0">
                     <CycleDots state={state} size={34}/>
                     <span className="ital mt-[18px] text-[44px] leading-12">Bien joué.</span>
                     <span className="text-xl font-extrabold">Pomodoro {number} sur {total} terminé</span>
@@ -32,7 +32,7 @@ export default function PhaseEnd({state, now}: { state: FocusState, now: number 
                         Prends {breakMinutes} minutes, lève les yeux de l’écran.
                     </span>
                 </div>
-                <div className="mt-auto flex w-full max-w-[400px] flex-col items-center gap-2.5 pt-10 pb-8 md:pb-0">
+                <div className="mt-auto flex w-full max-w-[400px] flex-col items-center gap-2.5 pt-10 pb-8 md:mt-0 md:pb-0">
                     <BaseButton size="large" className="h-14 w-full" onClick={nextPhase}>
                         <CupIcon size={18}/>
                         {next === "longBreak" ? "Lancer la pause longue" : "Lancer la pause"} · {breakMinutes} min
@@ -50,8 +50,8 @@ export default function PhaseEnd({state, now}: { state: FocusState, now: number 
 
     const until = clockOf(now + state.settings.workMinutes * MINUTE_MS);
     return (
-        <div className="flex grow flex-col items-center text-center">
-            <div className="flex flex-col items-center gap-2.5 pt-[70px] md:pt-6">
+        <div className="flex grow flex-col items-center text-center md:grow-0">
+            <div className="flex flex-col items-center gap-2.5 pt-[70px] md:pt-0">
                 <CupIcon size={34}/>
                 <span className="ital mt-3 text-[44px] leading-12">La pause est finie.</span>
                 <span className="text-xl font-extrabold">Prochain : pomodoro {number + 1} sur {total}</span>
@@ -59,7 +59,7 @@ export default function PhaseEnd({state, now}: { state: FocusState, now: number 
                     {name ? `${name} · ` : ""}{state.settings.workMinutes} min · jusqu’à {until}
                 </span>
             </div>
-            <div className="mt-auto flex w-full max-w-[400px] flex-col items-center gap-2.5 pt-10 pb-8 md:pb-0">
+            <div className="mt-auto flex w-full max-w-[400px] flex-col items-center gap-2.5 pt-10 pb-8 md:mt-0 md:pb-0">
                 <BaseButton size="large" className="h-14 w-full" onClick={nextPhase}>
                     <PlayIcon size={18}/> Reprendre
                 </BaseButton>
