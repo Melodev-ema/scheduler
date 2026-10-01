@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {canFocus, isFocusOn, targetOf} from '@/server/domain/focus/target';
+import {canFocus, isFocusOn, relinkTarget, targetOf} from '@/server/domain/focus/target';
 
 // Jeudi 1er octobre 2026, 10h.
 const NOW = new Date(2026, 9, 1, 10, 0);
@@ -64,5 +64,28 @@ describe('isFocusOn', () => {
         expect(isFocusOn(targetOf(slot(), PLANNING), slot({_id: 's2'}))).toBe(false);
         expect(isFocusOn({kind: 'free', subject: ''}, slot())).toBe(false);
         expect(isFocusOn(undefined, slot())).toBe(false);
+    });
+});
+
+describe('relinkTarget', () => {
+    const target = targetOf(slot(), PLANNING);
+
+    it('suit le créneau recopié dans un nouveau planning', () => {
+        const next = {...PLANNING, _id: 'p2', schedule: [slot({_id: 's9'})]};
+        expect(relinkTarget(target, next)).toEqual({...target, planningId: 'p2', slotId: 's9'});
+    });
+
+    it('rend la même cible si rien n’a changé', () => {
+        expect(relinkTarget(target, {...PLANNING, schedule: [slot()]})).toBe(target);
+    });
+
+    it('passe en focus libre si le créneau a été replanifié', () => {
+        const next = {...PLANNING, _id: 'p2', schedule: [slot({_id: 's9', startTime: '14:00', endTime: '16:00'})]};
+        expect(relinkTarget(target, next)).toEqual({kind: 'free', subject: 'Portfolio'});
+    });
+
+    it('laisse un focus libre tel quel', () => {
+        const free = {kind: 'free' as const, subject: 'Mails'};
+        expect(relinkTarget(free, {...PLANNING, schedule: []})).toBe(free);
     });
 });

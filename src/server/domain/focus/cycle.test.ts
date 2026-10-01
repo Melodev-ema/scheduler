@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
-    advance, cycleSteps, DEFAULT_FOCUS_SETTINGS, extendBreak, FocusState, focusMinutes, MINUTE_MS, pause, phasesOf,
+    acknowledgeSlotEnd, advance, asksSlotEnd, cycleSteps, isSlotOver, settleSlotEnd, slotEndMs, DEFAULT_FOCUS_SETTINGS, extendBreak, FocusState, focusMinutes, MINUTE_MS, pause, phasesOf,
     pomodoroNumber, pomodorosDone, remainingMs, resume, skipBreak, skipPhase, startFocus, startNextPhase, stop,
 } from '@/server/domain/focus/cycle';
 
@@ -202,5 +202,52 @@ describe('cycleSteps', () => {
     it('marque sautée une pause enchaînée', () => {
         const state = skipBreak(advance(startFocus(FREE, T0), min(25)), min(25));
         expect(cycleSteps(state).slice(0, 3).map((step) => step.status)).toEqual(['done', 'skipped', 'current']);
+    });
+});
+
+describe('fin du créneau', () => {
+    // Créneau 9h30 – 10h30, focus lancé à 10h (T0).
+    const SLOT = {
+        kind: 'slot' as const, planningId: 'p1', slotId: 's1', day: 'jeudi',
+        startTime: '09:30', endTime: '10:30', activity: 'Portfolio', priority: 1,
+    };
+
+    it('situe la fin du créneau le jour du focus', () => {
+        expect(slotEndMs(startFocus(SLOT, T0))).toBe(min(30));
+        expect(slotEndMs(startFocus(FREE, T0))).toBeNull();
+    });
+
+    it('voit le créneau fini à son heure de fin pile', () => {
+        const state = startFocus(SLOT, T0);
+        expect(isSlotOver(state, min(29))).toBe(false);
+        expect(isSlotOver(state, min(30))).toBe(true);
+        expect(isSlotOver(startFocus(FREE, T0), min(600))).toBe(false);
+    });
+
+    it('demande quoi faire d’un travail en cours, une seule fois', () => {
+        let state = advance(startFocus(SLOT, T0), min(25));
+        state = startNextPhase(state, min(25));
+        state = skipPhase(state, min(26));
+        expect(asksSlotEnd(state, min(29))).toBe(false);
+        expect(asksSlotEnd(state, min(31))).toBe(true);
+        expect(asksSlotEnd(acknowledgeSlotEnd(state), min(31))).toBe(false);
+    });
+
+    it('arrête de lui-même un focus en pause courte', () => {
+        const onBreak = startNextPhase(advance(startFocus(SLOT, T0), min(25)), min(25));
+        const settled = settleSlotEnd(onBreak, min(30));
+        expect(settled.status).toBe('finished');
+        expect(focusMinutes(settled)).toBe(25);
+    });
+
+    it('arrête de lui-même un focus en attente', () => {
+        expect(settleSlotEnd(advance(startFocus(SLOT, T0), min(25)), min(31)).status).toBe('finished');
+    });
+
+    it('laisse filer un travail en cours, et ne touche à rien avant l’heure', () => {
+        const working = skipPhase(startNextPhase(advance(startFocus(SLOT, T0), min(25)), min(25)), min(26));
+        expect(settleSlotEnd(working, min(35))).toBe(working);
+        const early = startFocus(SLOT, T0);
+        expect(settleSlotEnd(early, min(10))).toBe(early);
     });
 });

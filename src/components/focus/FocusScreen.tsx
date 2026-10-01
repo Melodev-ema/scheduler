@@ -5,7 +5,8 @@ import {BaseButton} from "@/components/uiComponents/BaseButton";
 import {ChevronDownIcon, CupIcon, PauseIcon, PlayIcon, SkipIcon, StopIcon} from "@/components/uiComponents/icons/icons";
 import {formatDuration} from "@/components/uiComponents/format";
 import {
-    currentPhase, FocusState, focusMinutes, pomodoroNumber, pomodorosDone, remainingMs,
+    asksSlotEnd, currentPhase, FocusState, focusMinutes, isSlotOver, pomodoroNumber, pomodorosDone, remainingMs,
+    SlotTarget,
 } from "@/server/domain/focus/cycle";
 import {
     clearFocus, clockOf, describeTimer, focusName, formatTimer, pathBeforeFocus, pauseFocus, resumeFocus,
@@ -16,8 +17,14 @@ import CycleDots from "@/components/focus/CycleDots";
 import CycleList, {PHASE_LABEL} from "@/components/focus/CycleList";
 import PhaseEnd from "@/components/focus/PhaseEnd";
 import MarkDoneDialog, {needsMarkDone} from "@/components/focus/MarkDoneDialog";
+import SlotOverBanner from "@/components/focus/SlotOverBanner";
 import {formatSlotTime} from "@/components/planning/DayTimeline";
 import {priorityStyle} from "@/components/uiComponents/priority";
+
+/** « 11h30 » : l'heure de fin du créneau. */
+function formatSlotEnd(target: SlotTarget): string {
+    return formatSlotTime(target).split(" – ")[1] ?? target.endTime;
+}
 
 /** Une phrase pour chaque pause, choisie par le numéro du pomodoro. */
 const BREAK_IDEAS = [
@@ -101,7 +108,9 @@ function timerViews({state, now}: { state: FocusState, now: number }) {
     const times = (
         <div className={`flex justify-between text-[13px] ${onBreak ? "text-ink" : "text-muted"}`}>
             <span>{onBreak ? `Pause depuis ${clockOf(state.phaseStartedAt)}` : `Commencé à ${clockOf(state.phaseStartedAt)}`}</span>
-            {!paused && <span>{onBreak ? `Reprise à ${clockOf(state.phaseEndsAt)}` : `Pause à ${clockOf(state.phaseEndsAt)}`}</span>}
+            {isSlotOver(state, now) && state.target.kind === "slot"
+                ? <span>Créneau fini à {formatSlotEnd(state.target)}</span>
+                : !paused && <span>{onBreak ? `Reprise à ${clockOf(state.phaseEndsAt)}` : `Pause à ${clockOf(state.phaseEndsAt)}`}</span>}
         </div>
     );
     const label = (
@@ -210,6 +219,7 @@ export default function FocusScreen() {
 
     const onBreak = state.status !== "finished" && state.status !== "awaiting" && currentPhase(state) !== "work";
     const timer = state.status === "running" || state.status === "paused" ? timerViews({state, now}) : null;
+    const slotOver = asksSlotEnd(state, now) && <SlotOverBanner state={state as FocusState & { target: SlotTarget }} now={now}/>;
     const body = state.status === "finished"
         ? <Done state={state} onReduce={reduce}/>
         : state.status === "awaiting" ? <PhaseEnd state={state} now={now}/> : null;
@@ -227,6 +237,7 @@ export default function FocusScreen() {
                                 <ChevronDownIcon size={16}/> Réduire
                             </BaseButton>
                         </div>
+                        {slotOver && <div className="mt-8">{slotOver}</div>}
                         {timer?.desktop}
                         {body && <div className="flex min-h-[460px] flex-col">{body}</div>}
                     </div>
@@ -245,6 +256,7 @@ export default function FocusScreen() {
                     <span className="w-11"/>
                 </div>
                 {state.status !== "awaiting" && state.status !== "finished" && <Heading state={state} centered/>}
+                {slotOver && <div className="mt-4">{slotOver}</div>}
                 {timer?.mobile}
                 {body}
             </div>

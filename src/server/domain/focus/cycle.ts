@@ -5,6 +5,8 @@
  * Aucune fonction ici n'appelle `Date.now()`.
  */
 
+import {isValidTime, parseTimeToMinutes} from '@/server/domain/planning/time';
+
 export const MINUTE_MS = 60_000;
 
 export interface FocusSettings {
@@ -76,6 +78,8 @@ export interface FocusState {
     finishedAt?: number;
     /** Focus sur un créneau, fini : la question « marquer comme fait ? » a eu sa réponse. */
     resolved?: boolean;
+    /** L'heure de fin du créneau est passée et l'on a choisi de finir le pomodoro en cours. */
+    slotEndAcknowledged?: boolean;
 }
 
 /** Travail, pause, travail… la dernière pause est longue. */
@@ -241,4 +245,43 @@ export function cycleSteps(state: FocusState): CycleStep[] {
         else status = 'upcoming';
         return {index, kind, minutes: phaseMinutes(state.settings, kind), status};
     });
+}
+
+/** L'heure de fin du créneau, le jour où le focus a commencé ; `null` pour un focus libre. */
+export function slotEndMs(state: FocusState): number | null {
+    const {target} = state;
+    if (target.kind !== 'slot' || !isValidTime(target.endTime)) return null;
+    const day = new Date(state.startedAt);
+    day.setHours(0, 0, 0, 0);
+    return day.getTime() + parseTimeToMinutes(target.endTime) * MINUTE_MS;
+}
+
+export function isSlotOver(state: FocusState, now: number): boolean {
+    const end = slotEndMs(state);
+    return end !== null && now >= end;
+}
+
+/**
+ * Le créneau est fini et le travail en cours attend une décision : c'est le
+ * moment de demander « finir ce pomodoro ou terminer maintenant ? ».
+ */
+export function asksSlotEnd(state: FocusState, now: number): boolean {
+    return isSlotOver(state, now) && !state.slotEndAcknowledged
+        && (state.status === 'running' || state.status === 'paused') && currentPhase(state) === 'work';
+}
+
+/** « Finir ce pomodoro » : on ne repose plus la question. */
+export function acknowledgeSlotEnd(state: FocusState): FocusState {
+    return {...state, slotEndAcknowledged: true};
+}
+
+/**
+ * Le créneau est fini : hors d'un travail en cours, le focus s'arrête de
+ * lui-même (pause, ou attente entre deux phases). Un travail en cours
+ * continue jusqu'à la décision, ou jusqu'à sa fin s'il a été gardé.
+ */
+export function settleSlotEnd(state: FocusState, now: number): FocusState {
+    if (state.status === 'finished' || !isSlotOver(state, now)) return state;
+    const working = (state.status === 'running' || state.status === 'paused') && currentPhase(state) === 'work';
+    return working ? state : stop(state, now);
 }

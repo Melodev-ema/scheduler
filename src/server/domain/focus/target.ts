@@ -48,3 +48,19 @@ export function targetOf(slot: FocusableSlot, planning: FocusablePlanning): Slot
 export function isFocusOn(target: FocusTarget | undefined, slot: FocusableSlot): boolean {
     return target?.kind === 'slot' && target.slotId === String(slot._id);
 }
+
+/**
+ * Après une regénération, un créneau gardé est recopié avec un nouvel `_id`.
+ * On le retrouve par son jour, son heure et son activité. Disparu (il a été
+ * replanifié), le focus continue en focus libre sur le même nom.
+ */
+export function relinkTarget(target: FocusTarget, planning: FocusablePlanning & {schedule: FocusableSlot[]}): FocusTarget {
+    if (target.kind !== 'slot') return target;
+    const same = planning.schedule.find((slot) =>
+        slot.day === target.day && slot.startTime === target.startTime && slot.activity === target.activity);
+    if (!same) return {kind: 'free', subject: target.activity};
+    const planningId = String(planning._id);
+    const slotId = String(same._id);
+    if (planningId === target.planningId && slotId === target.slotId && same.endTime === target.endTime) return target;
+    return {...target, planningId, slotId, endTime: same.endTime};
+}

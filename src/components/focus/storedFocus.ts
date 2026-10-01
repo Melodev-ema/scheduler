@@ -45,6 +45,7 @@ const stateSchema = z.object({
     completed: z.array(completedSchema),
     finishedAt: z.number().optional(),
     resolved: z.boolean().optional(),
+    slotEndAcknowledged: z.boolean().optional(),
 });
 
 /**

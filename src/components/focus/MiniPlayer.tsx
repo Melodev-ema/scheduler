@@ -3,15 +3,19 @@
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {ChevronDownIcon, CupIcon, PauseIcon, PlayIcon} from "@/components/uiComponents/icons/icons";
-import {currentPhase, FocusState, pomodoroNumber, remainingMs} from "@/server/domain/focus/cycle";
+import {currentPhase, FocusState, isSlotOver, pomodoroNumber, remainingMs} from "@/server/domain/focus/cycle";
+import {formatSlotTime} from "@/components/planning/DayTimeline";
 import {
     describeTimer, focusName, formatTimer, nextPhase, pauseFocus, resumeFocus, useFocus,
 } from "@/components/focus/focusStore";
 import {needsMarkDone} from "@/components/focus/MarkDoneDialog";
 
 /** Le sur-titre : où en est le cycle, en quelques mots. */
-function eyebrowOf(state: FocusState): string {
+function eyebrowOf(state: FocusState, now: number): string {
     if (state.status === "finished") return "Créneau terminé";
+    if (state.target.kind === "slot" && isSlotOver(state, now)) {
+        return `Créneau fini à ${formatSlotTime(state.target).split(" – ")[1]}`;
+    }
     const step = `${pomodoroNumber(state)} sur ${state.settings.pomodoros}`;
     const work = currentPhase(state) === "work";
     if (state.status === "awaiting") return work ? `Pomodoro ${pomodoroNumber(state)} fait` : "Pause finie";
@@ -77,7 +81,7 @@ function Summary({state, now, large}: { state: FocusState, now: number, large?: 
               aria-label={`Ouvrir le minuteur, ${name}${state.status === "awaiting" || state.status === "finished" ? "" : `, ${describeTimer(left)}`}`}
               className={`flex h-full min-w-0 items-center text-inherit no-underline ${large ? "grow gap-3" : "gap-4"}`}>
             <span className={`flex min-w-0 flex-col gap-px ${large ? "grow" : ""}`}>
-                <span className="eyebrow truncate text-line">{eyebrowOf(state)}</span>
+                <span className="eyebrow truncate text-line">{eyebrowOf(state, now)}</span>
                 <span className={`truncate font-bold ${large ? "text-[15px] leading-[19px]" : "max-w-[180px] text-sm leading-[18px]"}`}>{name}</span>
             </span>
             {state.status !== "awaiting" && state.status !== "finished" &&

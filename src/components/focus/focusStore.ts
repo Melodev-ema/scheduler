@@ -2,9 +2,12 @@
 
 import {useSyncExternalStore} from "react";
 import {
-    advance, extendBreak, FocusState, FocusTarget, pause, remainingMs, resume, skipBreak, skipPhase, startFocus,
-    startNextPhase, stop,
+    acknowledgeSlotEnd, advance, extendBreak, FocusState, FocusTarget, pause, remainingMs, resume, settleSlotEnd,
+    skipBreak, skipPhase, startFocus, startNextPhase, stop,
 } from "@/server/domain/focus/cycle";
+import {relinkTarget} from "@/server/domain/focus/target";
+import type {PlanningInterface} from "@/models/Planning";
+import {apiService} from "@/services/ApiService";
 import {parseStoredFocus} from "@/components/focus/storedFocus";
 import {playChime, unlockChime} from "@/components/focus/chime";
 import {formatClock} from "@/components/uiComponents/format";
@@ -52,7 +55,7 @@ function current(): FocusSnapshot {
         const now = Date.now();
         const stored = parseStoredFocus(read(), now);
         // Une phase écoulée pendant que la page était fermée se clôt à la lecture.
-        snapshot = {state: stored && advance(stored, now), now};
+        snapshot = {state: stored && settleSlotEnd(advance(stored, now), now), now};
     }
     return snapshot;
 }
@@ -72,10 +75,10 @@ function set(state: FocusState | null) {
 function tick() {
     const {state} = current();
     const now = Date.now();
-    const next = state && advance(state, now);
+    const next = state && settleSlotEnd(advance(state, now), now);
     if (next !== state) {
-        // Une phase vient de finir : un signal, puis l'écran de transition.
-        playChime();
+        // Une phase vient de finir : un signal (dans l'onglet visible seulement), puis l'écran de transition.
+        if (document.visibilityState === "visible") playChime();
         set(next);
         return;
     }
@@ -83,9 +86,13 @@ function tick() {
     emit();
 }
 
-/** Une seule horloge, et seulement quand un focus tourne et qu'on l'affiche. */
+/**
+ * Une seule horloge, tant qu'un focus n'est pas fini et qu'on l'affiche :
+ * même en pause ou en attente, la fin d'un créneau peut l'arrêter.
+ */
 function syncClock() {
-    const running = current().state?.status === "running" && listeners.size > 0;
+    const status = current().state?.status;
+    const running = status !== undefined && status !== "finished" && listeners.size > 0;
     if (running && !clock) clock = setInterval(tick, 1000);
     if (!running && clock) {
         clearInterval(clock);
@@ -110,16 +117,46 @@ function updateTitle() {
     }
 }
 
+/** Un autre onglet a changé le focus : on relit ce qu'il a écrit. */
+function onStorage(event: StorageEvent) {
+    if (event.key !== STORAGE_KEY) return;
+    snapshot = null;
+    emit();
+}
+
+/**
+ * La semaine a changé (génération, case cochée) : un créneau gardé par une
+ * regénération a un nouvel `_id`, on le suit pour pouvoir le cocher à la fin.
+ */
+function onSchedulerChanged() {
+    const {state} = current();
+    if (state?.target.kind !== "slot") return;
+    apiService.get<PlanningInterface>("/api/generate_weekly_planning")
+        .then((planning) => {
+            const latest = current().state;
+            if (!latest || latest.target.kind !== "slot") return;
+            const target = relinkTarget(latest.target, planning);
+            if (target !== latest.target) set({...latest, target});
+        })
+        .catch(() => {
+            // Pas de planning lisible : le focus garde sa cible.
+        });
+}
+
 function subscribe(listener: () => void) {
     listeners.add(listener);
     if (listeners.size === 1) {
         window.addEventListener(FOCUS_CHANGED, emit);
+        window.addEventListener("storage", onStorage);
+        window.addEventListener("scheduler:changed", onSchedulerChanged);
     }
     syncClock();
     return () => {
         listeners.delete(listener);
         if (listeners.size === 0) {
             window.removeEventListener(FOCUS_CHANGED, emit);
+            window.removeEventListener("storage", onStorage);
+            window.removeEventListener("scheduler:changed", onSchedulerChanged);
         }
         syncClock();
     };
@@ -172,7 +209,8 @@ export function replaceFocus(target: FocusTarget) {
 function update(change: (state: FocusState, now: number) => FocusState) {
     const {state} = current();
     if (!state) return;
-    set(change(state, Date.now()));
+    const now = Date.now();
+    set(settleSlotEnd(change(state, now), now));
 }
 
 export const pauseFocus = () => update(pause);
@@ -181,6 +219,7 @@ export const stopFocus = () => update(stop);
 export const nextPhase = () => update(startNextPhase);
 export const skipFocusBreak = () => update(skipBreak);
 export const skipFocusPhase = () => update(skipPhase);
+export const acknowledgeFocusSlotEnd = () => update(acknowledgeSlotEnd);
 export const extendFocusBreak = () => update((state, now) => extendBreak(state, now));
 
 /** La question de fin a eu sa réponse : on ne la repose plus. */
