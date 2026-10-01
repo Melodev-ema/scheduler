@@ -10,6 +10,8 @@ const ICONS = {"/": CalendarIcon, "/activity": ListIcon, "/task": CircleCheckIco
 /** Barre d'onglets du bas, mobile uniquement. */
 export default function MobileTabBar() {
     const pathname = usePathname();
+    // Le minuteur occupe tout l'écran sur mobile.
+    if (pathname === "/focus") return null;
 
     return (
         <nav aria-label="Pages"
