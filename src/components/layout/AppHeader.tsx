@@ -6,6 +6,7 @@ import {usePathname} from "next/navigation";
 import GenerateButton from "@/components/planning/GenerateButton";
 import {useWeek} from "@/components/planning/useWeek";
 import {rememberPath} from "@/components/focus/focusStore";
+import {MiniPlayerPill, useActiveFocus} from "@/components/focus/MiniPlayer";
 import {TimerIcon} from "@/components/uiComponents/icons/icons";
 
 export const NAV_ITEMS = [
@@ -41,6 +42,8 @@ export default function AppHeader() {
     const pathname = usePathname();
     const {stale} = useWeek();
     const onFocus = pathname === "/focus";
+    // Un focus tourne : le mini-lecteur prend la place du bouton.
+    const focus = useActiveFocus();
 
     useEffect(() => rememberPath(pathname), [pathname]);
 
@@ -74,11 +77,11 @@ export default function AppHeader() {
             <div className="hidden grow md:block"/>
 
             <div className="flex items-center gap-2 md:hidden">
-                <FocusLink compact current={onFocus}/>
+                {!focus.state && <FocusLink compact current={onFocus}/>}
                 <GenerateButton stale={stale} compact/>
             </div>
             <div className="hidden items-center gap-3 md:flex">
-                <FocusLink current={onFocus}/>
+                {focus.state ? <MiniPlayerPill state={focus.state} now={focus.now}/> : <FocusLink current={onFocus}/>}
                 <GenerateButton stale={stale}/>
             </div>
         </header>

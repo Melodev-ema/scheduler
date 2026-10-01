@@ -4,6 +4,7 @@ import {connection} from "next/server";
 import "./globals.css";
 import AppHeader from "@/components/layout/AppHeader";
 import MobileTabBar from "@/components/layout/MobileTabBar";
+import MiniPlayerBar from "@/components/focus/MiniPlayer";
 // L'entrée `unstyled` n'injecte pas de <style> à l'exécution : un tel élément
 // n'a pas le nonce de la CSP et serait bloqué. La feuille importée ici passe
 // par le pipeline CSS de Next et devient une ressource `'self'`.
@@ -53,6 +54,7 @@ export default async function RootLayout({children,}: Readonly<{
         <AppHeader/>
         <main className="mx-auto w-full max-w-[1600px] px-5 pb-32 md:px-10 md:pb-8">
             {children}
+            <MiniPlayerBar/>
         </main>
         <MobileTabBar/>
         <ToastContainer icon={false} position="bottom-right"/>
