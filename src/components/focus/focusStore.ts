@@ -187,13 +187,25 @@ export function clearFocus() {
     set(null);
 }
 
-/** La dernière page visitée hors de `/focus`, où « Réduire » ramène. */
-let lastPath = "/";
+/**
+ * La dernière page visitée hors de `/focus`, où « Réduire » ramène. Gardée
+ * pour l'onglet (`sessionStorage`) : elle survit à un rechargement du minuteur.
+ */
+const LAST_PATH_KEY = "scheduler:focus-from";
 
 export function rememberPath(pathname: string) {
-    if (pathname !== "/focus") lastPath = pathname;
+    if (pathname === "/focus") return;
+    try {
+        sessionStorage.setItem(LAST_PATH_KEY, pathname);
+    } catch {
+        // Stockage indisponible : « Réduire » ramènera à la semaine.
+    }
 }
 
 export function pathBeforeFocus(): string {
-    return lastPath;
+    try {
+        return sessionStorage.getItem(LAST_PATH_KEY) ?? "/";
+    } catch {
+        return "/";
+    }
 }
