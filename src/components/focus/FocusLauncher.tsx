@@ -9,7 +9,7 @@ import {formatTimer, launchFocus} from "@/components/focus/focusStore";
 /** Rappel des durées du cycle, sous les chiffres. */
 export function cycleSummary(): string {
     const s = DEFAULT_FOCUS_SETTINGS;
-    return `Un pomodoro de ${s.workMinutes} min.`;
+    return `${s.pomodoros} pomodoros de ${s.workMinutes} min, pauses de ${s.shortBreakMinutes} min, pause longue de ${s.longBreakMinutes} min.`;
 }
 
 /**
@@ -43,7 +43,7 @@ export default function FocusLauncher({onClose}: { onClose: () => void }) {
                     <span className="serif text-[112px] leading-[116px] tracking-[-3px] tabular-nums">
                         {formatTimer(DEFAULT_FOCUS_SETTINGS.workMinutes * 60_000)}
                     </span>
-                    <p className="m-0 mt-0.5 text-sm text-muted">{cycleSummary()}</p>
+                    <p className="m-0 mt-0.5 max-w-[300px] text-sm leading-5 text-muted">{cycleSummary()}</p>
                 </div>
 
                 <label htmlFor="focus-subject" className="mt-6 text-[13px] font-bold">

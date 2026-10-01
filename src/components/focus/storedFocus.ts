@@ -15,7 +15,7 @@ const targetSchema = z.object({kind: z.literal('free'), subject: z.string()});
 
 const completedSchema = z.object({
     index: z.number().int().min(0),
-    kind: z.literal('work'),
+    kind: z.enum(['work', 'shortBreak', 'longBreak']),
     minutes: z.number().min(0),
     partial: z.boolean().optional(),
 });
@@ -24,7 +24,7 @@ const stateSchema = z.object({
     target: targetSchema,
     settings: settingsSchema,
     phaseIndex: z.number().int().min(0),
-    status: z.enum(['running', 'paused', 'finished']),
+    status: z.enum(['running', 'paused', 'awaiting', 'finished']),
     startedAt: z.number(),
     phaseStartedAt: z.number(),
     phaseDurationMs: z.number().min(0),

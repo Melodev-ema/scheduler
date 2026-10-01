@@ -1,72 +1,166 @@
 import {describe, expect, it} from 'vitest';
 import {
-    advance, DEFAULT_FOCUS_SETTINGS, focusMinutes, MINUTE_MS, pause, remainingMs, resume, startFocus, stop,
+    advance, cycleSteps, DEFAULT_FOCUS_SETTINGS, extendBreak, FocusState, focusMinutes, MINUTE_MS, pause, phasesOf,
+    pomodoroNumber, pomodorosDone, remainingMs, resume, skipBreak, skipPhase, startFocus, startNextPhase, stop,
 } from '@/server/domain/focus/cycle';
 
 const T0 = new Date(2026, 9, 1, 10, 0).getTime();
 const FREE = {kind: 'free' as const, subject: 'Trier mes mails'};
+const min = (n: number) => T0 + n * MINUTE_MS;
+
+/** Mène le focus jusqu'au début du pomodoro `n` (1 à 4), pauses comprises. */
+function atPomodoro(n: number): FocusState {
+    let state = startFocus(FREE, T0);
+    for (let i = 1; i < n; i++) {
+        state = advance(state, state.phaseEndsAt);
+        state = startNextPhase(state, state.phaseEndsAt);
+        state = advance(state, state.phaseEndsAt);
+        state = startNextPhase(state, state.phaseEndsAt);
+    }
+    return state;
+}
+
+describe('phasesOf', () => {
+    it('alterne travail et pause, la dernière pause est longue', () => {
+        expect(phasesOf(DEFAULT_FOCUS_SETTINGS)).toEqual([
+            'work', 'shortBreak', 'work', 'shortBreak', 'work', 'shortBreak', 'work', 'longBreak',
+        ]);
+    });
+
+    it('un seul pomodoro : travail puis pause longue', () => {
+        expect(phasesOf({...DEFAULT_FOCUS_SETTINGS, pomodoros: 1})).toEqual(['work', 'longBreak']);
+    });
+});
 
 describe('startFocus', () => {
     it('lance un premier travail de 25 min', () => {
         const state = startFocus(FREE, T0);
         expect(state.status).toBe('running');
         expect(state.phaseIndex).toBe(0);
-        expect(state.phaseEndsAt).toBe(T0 + 25 * MINUTE_MS);
+        expect(state.phaseEndsAt).toBe(min(25));
         expect(state.settings).toEqual(DEFAULT_FOCUS_SETTINGS);
     });
 });
 
 describe('remainingMs', () => {
     it('décompte depuis l’échéance', () => {
-        expect(remainingMs(startFocus(FREE, T0), T0 + 5 * MINUTE_MS)).toBe(20 * MINUTE_MS);
+        expect(remainingMs(startFocus(FREE, T0), min(5))).toBe(20 * MINUTE_MS);
     });
 
     it('n’est jamais négatif', () => {
-        expect(remainingMs(startFocus(FREE, T0), T0 + 90 * MINUTE_MS)).toBe(0);
+        expect(remainingMs(startFocus(FREE, T0), min(90))).toBe(0);
     });
 });
 
 describe('advance', () => {
     it('ne change rien avant l’échéance', () => {
         const state = startFocus(FREE, T0);
-        expect(advance(state, T0 + 24 * MINUTE_MS)).toBe(state);
+        expect(advance(state, min(24))).toBe(state);
     });
 
-    it('clôt la phase à l’échéance, même avec des heures de retard', () => {
-        const state = advance(startFocus(FREE, T0), T0 + 5 * 60 * MINUTE_MS);
+    it('clôt une seule phase et attend, même avec des heures de retard', () => {
+        const state = advance(startFocus(FREE, T0), min(5 * 60));
+        expect(state.status).toBe('awaiting');
+        expect(state.phaseIndex).toBe(0);
+        expect(state.completed).toEqual([{index: 0, kind: 'work', minutes: 25}]);
+    });
+
+    it('finit le focus à la fin de la pause longue', () => {
+        let state = atPomodoro(4);
+        state = startNextPhase(advance(state, state.phaseEndsAt), state.phaseEndsAt);
+        expect(state.phaseIndex).toBe(7);
+        const end = state.phaseEndsAt;
+        state = advance(state, end + MINUTE_MS);
         expect(state.status).toBe('finished');
-        expect(state.completed).toHaveLength(1);
-        expect(state.finishedAt).toBe(T0 + 25 * MINUTE_MS);
+        expect(state.finishedAt).toBe(end);
     });
 });
 
 describe('pause et resume', () => {
     it('décale l’échéance de la durée de la pause, sans toucher au temps restant', () => {
-        const paused = pause(startFocus(FREE, T0), T0 + 10 * MINUTE_MS);
+        const paused = pause(startFocus(FREE, T0), min(10));
         expect(paused.status).toBe('paused');
-        expect(remainingMs(paused, T0 + 13 * MINUTE_MS)).toBe(15 * MINUTE_MS);
-        const resumed = resume(paused, T0 + 13 * MINUTE_MS);
+        expect(remainingMs(paused, min(13))).toBe(15 * MINUTE_MS);
+        const resumed = resume(paused, min(13));
         expect(resumed.status).toBe('running');
-        expect(resumed.phaseEndsAt).toBe(T0 + 28 * MINUTE_MS);
-        expect(remainingMs(resumed, T0 + 13 * MINUTE_MS)).toBe(15 * MINUTE_MS);
+        expect(resumed.phaseEndsAt).toBe(min(28));
+        expect(remainingMs(resumed, min(13))).toBe(15 * MINUTE_MS);
     });
 
     it('ignore une pause en pause et une reprise en cours', () => {
         const state = startFocus(FREE, T0);
         expect(resume(state, T0)).toBe(state);
         const paused = pause(state, T0);
-        expect(pause(paused, T0 + MINUTE_MS)).toBe(paused);
+        expect(pause(paused, min(1))).toBe(paused);
     });
 
     it('n’avance pas pendant la pause', () => {
-        const paused = pause(startFocus(FREE, T0), T0 + MINUTE_MS);
-        expect(advance(paused, T0 + 60 * MINUTE_MS)).toBe(paused);
+        const paused = pause(startFocus(FREE, T0), min(1));
+        expect(advance(paused, min(60))).toBe(paused);
+    });
+});
+
+describe('startNextPhase', () => {
+    it('lance la pause courte après un travail', () => {
+        const state = startNextPhase(advance(startFocus(FREE, T0), min(25)), min(26));
+        expect(state.status).toBe('running');
+        expect(state.phaseIndex).toBe(1);
+        expect(state.phaseEndsAt).toBe(min(31));
+    });
+
+    it('ne fait rien hors attente', () => {
+        const state = startFocus(FREE, T0);
+        expect(startNextPhase(state, min(1))).toBe(state);
+    });
+});
+
+describe('skipPhase', () => {
+    it('passe un travail sans le compter et lance la pause', () => {
+        const state = skipPhase(startFocus(FREE, T0), min(10));
+        expect(state.phaseIndex).toBe(1);
+        expect(state.status).toBe('running');
+        expect(state.completed).toEqual([]);
+        expect(state.phaseEndsAt).toBe(min(15));
+    });
+
+    it('passe aussi une phase en pause', () => {
+        expect(skipPhase(pause(startFocus(FREE, T0), min(3)), min(4)).phaseIndex).toBe(1);
+    });
+});
+
+describe('skipBreak', () => {
+    it('enchaîne le pomodoro suivant sans compter la pause', () => {
+        const state = skipBreak(advance(startFocus(FREE, T0), min(25)), min(25));
+        expect(state.phaseIndex).toBe(2);
+        expect(state.status).toBe('running');
+        expect(state.completed.map((phase) => phase.kind)).toEqual(['work']);
+    });
+
+    it('après le dernier pomodoro, finit le focus', () => {
+        const state = atPomodoro(4);
+        expect(skipBreak(advance(state, state.phaseEndsAt), state.phaseEndsAt).status).toBe('finished');
+    });
+});
+
+describe('extendBreak', () => {
+    it('relance la pause qui vient de finir pour 5 min', () => {
+        let state = startNextPhase(advance(startFocus(FREE, T0), min(25)), min(25));
+        state = advance(state, min(30));
+        const extended = extendBreak(state, min(31));
+        expect(extended.status).toBe('running');
+        expect(extended.phaseIndex).toBe(1);
+        expect(extended.phaseEndsAt).toBe(min(36));
+    });
+
+    it('ne prolonge pas un travail', () => {
+        const state = advance(startFocus(FREE, T0), min(25));
+        expect(extendBreak(state, min(25))).toBe(state);
     });
 });
 
 describe('stop et focusMinutes', () => {
     it('compte la part écoulée d’un travail arrêté', () => {
-        const state = stop(startFocus(FREE, T0), T0 + 12 * MINUTE_MS + 30_000);
+        const state = stop(startFocus(FREE, T0), min(12) + 30_000);
         expect(state.status).toBe('finished');
         expect(focusMinutes(state)).toBe(12);
     });
@@ -75,7 +169,38 @@ describe('stop et focusMinutes', () => {
         expect(focusMinutes(stop(startFocus(FREE, T0), T0 + 40_000))).toBe(0);
     });
 
-    it('compte un travail mené à son terme', () => {
-        expect(focusMinutes(advance(startFocus(FREE, T0), T0 + 25 * MINUTE_MS))).toBe(25);
+    it('additionne les travaux faits et la part du travail arrêté', () => {
+        const state = atPomodoro(3);
+        const stopped = stop(state, state.phaseStartedAt + 10 * MINUTE_MS);
+        expect(focusMinutes(stopped)).toBe(60);
+        expect(pomodorosDone(stopped)).toBe(2);
+    });
+
+    it('ne compte rien pour une pause arrêtée', () => {
+        const state = startNextPhase(advance(startFocus(FREE, T0), min(25)), min(25));
+        expect(focusMinutes(stop(state, min(28)))).toBe(25);
+    });
+});
+
+describe('pomodoroNumber', () => {
+    it('suit le travail en cours et la pause qui le suit', () => {
+        const state = atPomodoro(2);
+        expect(pomodoroNumber(state)).toBe(2);
+        expect(pomodoroNumber(startNextPhase(advance(state, state.phaseEndsAt), state.phaseEndsAt))).toBe(2);
+    });
+});
+
+describe('cycleSteps', () => {
+    it('au pomodoro 2 : deux phases faites, une en cours, cinq à venir', () => {
+        const steps = cycleSteps(atPomodoro(2));
+        expect(steps.map((step) => step.status)).toEqual([
+            'done', 'done', 'current', 'upcoming', 'upcoming', 'upcoming', 'upcoming', 'upcoming',
+        ]);
+        expect(steps[7]).toMatchObject({kind: 'longBreak', minutes: 15});
+    });
+
+    it('marque sautée une pause enchaînée', () => {
+        const state = skipBreak(advance(startFocus(FREE, T0), min(25)), min(25));
+        expect(cycleSteps(state).slice(0, 3).map((step) => step.status)).toEqual(['done', 'skipped', 'current']);
     });
 });

@@ -2,9 +2,12 @@
 
 import {useSyncExternalStore} from "react";
 import {
-    advance, FocusState, FocusTarget, pause, remainingMs, resume, startFocus, stop,
+    advance, extendBreak, FocusState, FocusTarget, pause, remainingMs, resume, skipBreak, skipPhase, startFocus,
+    startNextPhase, stop,
 } from "@/server/domain/focus/cycle";
 import {parseStoredFocus} from "@/components/focus/storedFocus";
+import {playChime, unlockChime} from "@/components/focus/chime";
+import {formatClock} from "@/components/uiComponents/format";
 
 /**
  * Le focus en cours, unique. Même principe que `useWeek` : pas de store
@@ -71,6 +74,8 @@ function tick() {
     const now = Date.now();
     const next = state && advance(state, now);
     if (next !== state) {
+        // Une phase vient de finir : un signal, puis l'écran de transition.
+        playChime();
         set(next);
         return;
     }
@@ -93,11 +98,12 @@ let originalTitle: string | null = null;
 /** « 18:42 · Portfolio » dans l'onglet, tant qu'un focus tourne ou attend. */
 function updateTitle() {
     const {state, now} = current();
-    const active = state && (state.status === "running" || state.status === "paused");
+    const active = state && state.status !== "finished";
     if (active) {
         if (originalTitle === null) originalTitle = document.title;
         const name = focusName(state);
-        document.title = `${state.status === "paused" ? "⏸ " : ""}${formatTimer(remainingMs(state, now))}${name ? ` · ${name}` : ""}`;
+        const head = state.status === "awaiting" ? "Phase finie" : formatTimer(remainingMs(state, now));
+        document.title = `${state.status === "paused" ? "⏸ " : ""}${head}${name ? ` · ${name}` : ""}`;
     } else if (originalTitle !== null) {
         document.title = originalTitle;
         originalTitle = null;
@@ -138,6 +144,12 @@ export function describeTimer(ms: number): string {
     return `${Math.floor(total / 60)} minutes ${total % 60} secondes restantes`;
 }
 
+/** 10:03 → « 10h03 ». */
+export function clockOf(timestamp: number): string {
+    const date = new Date(timestamp);
+    return formatClock(date.getHours() * 60 + date.getMinutes());
+}
+
 /** Ce sur quoi porte le focus : le sujet, s'il y en a un. */
 export function focusName(state: FocusState): string {
     return state.target.subject.trim();
@@ -147,11 +159,13 @@ export function focusName(state: FocusState): string {
 export function launchFocus(target: FocusTarget): "started" | "conflict" {
     const {state} = current();
     if (state && state.status !== "finished") return "conflict";
+    unlockChime();
     set(startFocus(target, Date.now()));
     return "started";
 }
 
 export function replaceFocus(target: FocusTarget) {
+    unlockChime();
     set(startFocus(target, Date.now()));
 }
 
@@ -164,6 +178,10 @@ function update(change: (state: FocusState, now: number) => FocusState) {
 export const pauseFocus = () => update(pause);
 export const resumeFocus = () => update(resume);
 export const stopFocus = () => update(stop);
+export const nextPhase = () => update(startNextPhase);
+export const skipFocusBreak = () => update(skipBreak);
+export const skipFocusPhase = () => update(skipPhase);
+export const extendFocusBreak = () => update((state, now) => extendBreak(state, now));
 
 export function clearFocus() {
     set(null);

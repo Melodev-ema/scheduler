@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {MINUTE_MS, startFocus, stop} from '@/server/domain/focus/cycle';
+import {advance, MINUTE_MS, startFocus, startNextPhase, stop} from '@/server/domain/focus/cycle';
 import {parseStoredFocus} from '@/components/focus/storedFocus';
 
 const T0 = new Date(2026, 9, 1, 10, 0).getTime();
@@ -9,6 +9,13 @@ describe('parseStoredFocus', () => {
     it('relit un état valide', () => {
         const state = startFocus(FREE, T0);
         expect(parseStoredFocus(JSON.stringify(state), T0)).toEqual(state);
+    });
+
+    it('relit un focus en pause courte, ou en attente entre deux phases', () => {
+        const awaiting = advance(startFocus(FREE, T0), T0 + 25 * MINUTE_MS);
+        expect(parseStoredFocus(JSON.stringify(awaiting), T0)).toEqual(awaiting);
+        const onBreak = startNextPhase(awaiting, T0 + 25 * MINUTE_MS);
+        expect(parseStoredFocus(JSON.stringify(onBreak), T0)).toEqual(onBreak);
     });
 
     it('ignore une valeur absente, vide ou cassée', () => {
