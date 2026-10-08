@@ -117,3 +117,13 @@ export function CupIcon(props: IconProps) {
 export function ChevronDownIcon(props: IconProps) {
     return <Svg {...props}><path d="M6 9l6 6 6-6"/></Svg>;
 }
+
+/** Notifications du minuteur ; barrée quand elles sont coupées. */
+export function BellIcon({off, ...props}: IconProps & { off?: boolean }) {
+    return (
+        <Svg {...props}>
+            <path d="M6.5 16.5v-5.5a5.5 5.5 0 0 1 11 0v5.5l1.5 2h-14z"/><path d="M10 21h4"/>
+            {off && <path d="M4 4l16 16"/>}
+        </Svg>
+    );
+}

@@ -6,10 +6,12 @@ import {
     skipBreak, skipPhase, startFocus, startNextPhase, stop,
 } from "@/server/domain/focus/cycle";
 import {relinkTarget} from "@/server/domain/focus/target";
+import {phaseEndNotice} from "@/server/domain/focus/notice";
 import type {PlanningInterface} from "@/models/Planning";
 import {apiService} from "@/services/ApiService";
 import {parseStoredFocus} from "@/components/focus/storedFocus";
 import {playChime, unlockChime} from "@/components/focus/chime";
+import {notifyPhaseEnd} from "@/components/focus/notify";
 import {formatClock} from "@/components/uiComponents/format";
 
 /**
@@ -79,6 +81,9 @@ function tick() {
     if (next !== state) {
         // Une phase vient de finir : un signal (dans l'onglet visible seulement), puis l'écran de transition.
         if (document.visibilityState === "visible") playChime();
+        // Et une notification du navigateur, si elles sont activées et qu'on regarde ailleurs.
+        const notice = state && next && phaseEndNotice(state, next);
+        if (notice) notifyPhaseEnd(notice);
         set(next);
         return;
     }

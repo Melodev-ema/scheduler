@@ -12,6 +12,7 @@ import {BaseButton} from "@/components/uiComponents/BaseButton";
 import {CheckIcon, CloseIcon, PlayIcon} from "@/components/uiComponents/icons/icons";
 import {DEFAULT_FOCUS_SETTINGS} from "@/server/domain/focus/cycle";
 import {formatTimer} from "@/components/focus/focusStore";
+import NotifyToggle from "@/components/focus/NotifyToggle";
 
 /** Rappel des durées du cycle, sous les chiffres. */
 export function cycleSummary(): string {
@@ -48,7 +49,7 @@ export default function FocusLauncher({onClose}: { onClose: () => void }) {
                         <CloseIcon size={20}/>
                     </button>
                     <span className="eyebrow">Focus</span>
-                    <span className="w-11"/>
+                    <NotifyToggle compact/>
                 </div>
                 <span className="eyebrow hidden text-center md:block">Focus libre</span>
 
@@ -110,11 +111,12 @@ export default function FocusLauncher({onClose}: { onClose: () => void }) {
                         </div>
                     }
 
-                    <div className="mt-auto pt-8 pb-6 md:pb-0">
+                    <div className="mt-auto flex flex-col items-center gap-2 pt-8 pb-6 md:pb-0">
                         <BaseButton type="submit" size="large" className="w-full">
                             <PlayIcon size={18}/>
                             Lancer le focus
                         </BaseButton>
+                        <div className="hidden md:block"><NotifyToggle/></div>
                     </div>
                 </form>
                 {dialog}

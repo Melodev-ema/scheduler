@@ -18,6 +18,7 @@ import CycleList, {PHASE_LABEL} from "@/components/focus/CycleList";
 import PhaseEnd from "@/components/focus/PhaseEnd";
 import MarkDoneDialog, {needsMarkDone} from "@/components/focus/MarkDoneDialog";
 import SlotOverBanner from "@/components/focus/SlotOverBanner";
+import NotifyToggle from "@/components/focus/NotifyToggle";
 import {formatSlotTime} from "@/components/planning/DayTimeline";
 import {priorityStyle} from "@/components/uiComponents/priority";
 
@@ -234,9 +235,12 @@ export default function FocusScreen() {
                     <div className="flex min-w-0 flex-col">
                         <div className="flex items-start justify-between gap-4">
                             <Heading state={state}/>
-                            <BaseButton theme="secondary" size="small" onClick={reduce}>
-                                <ChevronDownIcon size={16}/> Réduire
-                            </BaseButton>
+                            <div className="flex shrink-0 items-center gap-2">
+                                <NotifyToggle className={onBreak ? "text-ink hover:bg-ink/10" : ""}/>
+                                <BaseButton theme="secondary" size="small" onClick={reduce}>
+                                    <ChevronDownIcon size={16}/> Réduire
+                                </BaseButton>
+                            </div>
                         </div>
                         {slotOver && <div className="mt-8">{slotOver}</div>}
                         {timer && <div className="flex grow flex-col justify-center pb-6">{timer.desktop}</div>}
@@ -254,7 +258,7 @@ export default function FocusScreen() {
                         <ChevronDownIcon size={20}/>
                     </button>
                     <span className={`eyebrow ${onBreak ? "text-ink" : ""}`}>{onBreak ? "Pause" : "Focus"}</span>
-                    <span className="w-11"/>
+                    <NotifyToggle compact className={onBreak ? "border-ink/30" : ""}/>
                 </div>
                 {state.status !== "awaiting" && state.status !== "finished" && <Heading state={state} centered/>}
                 {slotOver && <div className="mt-4">{slotOver}</div>}
