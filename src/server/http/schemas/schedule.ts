@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {objectId} from '@/server/http/schemas/common';
+import {parseWeekKey} from '@/server/domain/planning/week';
 
 /**
  * Les deux seuls statuts que `ScheduleSchema` accepte (voir src/models/Schedule.ts).
@@ -25,3 +26,18 @@ export const scheduleLockSchema = z.object({
 });
 
 export type ScheduleLockBody = z.infer<typeof scheduleLockSchema>;
+
+/** `?week=YYYY-MM-DD` : le lundi d'une semaine, rendu en `Date` ; absent, l'appelant prend la semaine en cours. */
+export const weekQuerySchema = z.object({
+    week: z.string().optional().transform((value, ctx) => {
+        if (value === undefined) {
+            return undefined;
+        }
+        const monday = parseWeekKey(value);
+        if (!monday) {
+            ctx.addIssue({code: 'custom', message: 'semaine invalide'});
+            return z.NEVER;
+        }
+        return monday;
+    }),
+});

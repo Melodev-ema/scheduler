@@ -1,4 +1,5 @@
 import type {Types} from 'mongoose';
+import type {NextRequest} from 'next/server';
 import Activity from '@/models/Activity';
 import Task from '@/models/Task';
 import dbConnect from '@/server/infrastructure/db/connection';
@@ -29,7 +30,9 @@ import {
     remainingWindows, weekStartOf,
 } from '@/server/domain/planning/partial';
 import {createRateLimiter} from '@/server/http/rateLimit';
-import {fail, serverError} from '@/server/http/apiResponse';
+import {fail, invalidInput, serverError} from '@/server/http/apiResponse';
+import {weekQuerySchema} from '@/server/http/schemas/schedule';
+import {latestPlanningOf} from '@/server/infrastructure/db/plannings';
 
 /** Nombre d'appels au modèle avant d'abandonner sur une réponse inexploitable. */
 const GENERATION_ATTEMPTS = 2;
@@ -53,11 +56,16 @@ const GENERATION_WINDOW_MS = 15 * 60 * 1000;
 // Instancié au chargement du module : l'état vit aussi longtemps que le processus.
 const generationLimiter = createRateLimiter(GENERATION_LIMIT, GENERATION_WINDOW_MS);
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
         await dbConnect();
 
-        const planning = await Planning.findOne().sort({timestamp: -1});
+        const parsed = weekQuerySchema.safeParse({week: request.nextUrl.searchParams.get('week') ?? undefined});
+        if (!parsed.success) {
+            return invalidInput(parsed.error);
+        }
+
+        const planning = await latestPlanningOf(parsed.data.week ?? weekStartOf(new Date()));
         if (planning) {
             return Response.json(planning);
         }
