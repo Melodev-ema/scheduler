@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect, useRef, useState} from "react";
-import {toast} from "react-toastify";
+import {toast} from "react-toastify/unstyled";
 import {apiService} from "@/services/ApiService";
 import type {TaskInterface} from "@/models/Task";
 import {BaseButton} from "@/components/uiComponents/BaseButton";

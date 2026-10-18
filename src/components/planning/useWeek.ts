@@ -1,7 +1,7 @@
 "use client";
 
 import {useCallback, useEffect, useState} from "react";
-import {toast} from "react-toastify";
+import {toast} from "react-toastify/unstyled";
 import {PlanningInterface} from "@/models/Planning";
 import {ActivityInterface} from "@/models/Activity";
 import {apiService, HttpError} from "@/services/ApiService";

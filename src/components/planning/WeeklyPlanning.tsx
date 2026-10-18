@@ -2,7 +2,7 @@
 
 import {useState} from "react";
 import Link from "next/link";
-import {toast} from "react-toastify";
+import {toast} from "react-toastify/unstyled";
 import {PlanningInterface} from "@/models/Planning";
 import {ScheduleInterface} from "@/models/Schedule";
 import {apiService} from "@/services/ApiService";

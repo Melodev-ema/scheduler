@@ -1,7 +1,7 @@
 "use client";
 
 import {useState} from "react";
-import {toast} from "react-toastify";
+import {toast} from "react-toastify/unstyled";
 import {apiService, HttpError} from "@/services/ApiService";
 import {notifySchedulerChanged} from "@/components/planning/useWeek";
 import {BaseButton} from "@/components/uiComponents/BaseButton";
