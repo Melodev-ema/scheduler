@@ -5,8 +5,8 @@ import {backfillWeekStart} from '@/server/infrastructure/db/plannings';
 interface CachedMongoose {
     conn: Mongoose | null;
     promise: Promise<Mongoose> | null;
-    /** Le rattrapage de `weekStart` n'est lancé qu'une fois par processus. */
-    backfilled?: boolean;
+    /** Le rattrapage de `weekStart` n'est lancé qu'une fois par processus ; chaque requête attend la même promesse. */
+    backfill?: Promise<void>;
 }
 
 declare global {
@@ -26,20 +26,19 @@ async function connect(): Promise<Mongoose> {
     return cached.conn;
 }
 
-async function backfillOnce(): Promise<void> {
-    if (cached.backfilled) {
-        return;
-    }
-    cached.backfilled = true;
-    try {
-        const count = await backfillWeekStart();
-        if (count > 0) {
-            console.info(`weekStart rattrapé sur ${count} planning(s)`);
-        }
-    } catch (error) {
-        // Un rattrapage raté ne doit jamais bloquer une requête.
-        console.error('Rattrapage de weekStart échoué', error);
-    }
+function backfillOnce(): Promise<void> {
+    cached.backfill ??= backfillWeekStart()
+        .then(count => {
+            if (count > 0) {
+                console.info(`weekStart rattrapé sur ${count} planning(s)`);
+            }
+        })
+        .catch(error => {
+            // Un rattrapage raté ne doit jamais bloquer une requête ; la suivante réessaie.
+            console.error('Rattrapage de weekStart échoué', error);
+            cached.backfill = undefined;
+        });
+    return cached.backfill;
 }
 
 async function dbConnect(): Promise<Mongoose> {
