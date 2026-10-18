@@ -9,7 +9,8 @@ import {apiService} from "@/services/ApiService";
 import {WEEKDAYS, weekdayFromDate} from "@/server/domain/planning/days";
 import {parseTimeToMinutes} from "@/server/domain/planning/time";
 import {lunchBreakOf} from "@/server/domain/planning/lunchBreak";
-import {isCurrentWeek, isFrozen, sessionPartsOf} from "@/server/domain/planning/partial";
+import {isFrozen, sessionPartsOf} from "@/server/domain/planning/partial";
+import {parseWeekKey, weekKeyOf} from "@/server/domain/planning/week";
 import DayTimeline, {DayItems, SlotFocus} from "@/components/planning/DayTimeline";
 import {canFocus, isFocusOn, targetOf} from "@/server/domain/focus/target";
 import {useFocus} from "@/components/focus/focusStore";
@@ -17,6 +18,7 @@ import {useFocusLauncher} from "@/components/focus/SwitchFocusDialog";
 import {useRouter} from "next/navigation";
 import GenerateButton from "@/components/planning/GenerateButton";
 import {useWeek} from "@/components/planning/useWeek";
+import {neighbours, weekKindOf} from "@/components/planning/weekNav";
 import Spinner from "@/components/uiComponents/Spinner";
 import PriorityIcon from "@/components/uiComponents/icons/PriorityIcon";
 import {AlertIcon, CloseIcon} from "@/components/uiComponents/icons/icons";
@@ -96,6 +98,23 @@ function HideButton({onClick}: { onClick: () => void }) {
     );
 }
 
+/** ‹ ou › autour du titre, désactivée quand aucune semaine n'est atteignable de ce côté. */
+function WeekArrow({direction, onClick}: { direction: "previous" | "next", onClick: (() => void) | null }) {
+    const label = direction === "previous" ? "Semaine précédente" : "Semaine suivante";
+    return (
+        <button
+            type="button"
+            onClick={onClick ?? undefined}
+            disabled={onClick === null}
+            aria-label={label}
+            title={label}
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-2xl leading-none text-ink transition-colors hover:bg-line disabled:text-line disabled:hover:bg-transparent"
+        >
+            <span aria-hidden="true">{direction === "previous" ? "‹" : "›"}</span>
+        </button>
+    );
+}
+
 function startMinutes(slot: ScheduleInterface): number {
     try {
         return parseTimeToMinutes(slot.startTime);
@@ -105,7 +124,9 @@ function startMinutes(slot: ScheduleInterface): number {
 }
 
 export default function WeeklyPlanning() {
-    const {planning, loaded, stale, setPlanning, reload, generating} = useWeek();
+    /** La semaine affichée ; `null` = la semaine en cours. */
+    const [shownWeek, setShownWeek] = useState<string | null>(null);
+    const {planning, loaded, stale, setPlanning, reload, generating, weeks} = useWeek(shownWeek ?? undefined);
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
     const [noteOpen, setNoteOpen] = useState(false);
     const [hidden, setHidden] = useState<Partial<Record<Dismissable, string>>>({});
@@ -113,17 +134,56 @@ export default function WeeklyPlanning() {
     const focusLauncher = useFocusLauncher();
     const router = useRouter();
 
+    const today = new Date();
+    const monday = (shownWeek ? parseWeekKey(shownWeek) : null) ?? mondayOf(today);
+    const sunday = addDays(monday, 6);
+    const weekKey = weekKeyOf(monday);
+    const kind = weekKindOf(weekKey, today);
+    // Calculé au rendu : suffisant pour une page qu'on recharge à chaque action.
+    const currentWeek = kind === "current";
+    const {previous, next} = neighbours(weekKey, weeks, today);
+
+    /** Changer de semaine ; la semaine en cours redevient `null`, et le jour choisi sur mobile s'oublie. */
+    function showWeek(key: string | null) {
+        setShownWeek(key === null || key === weekKeyOf(today) ? null : key);
+        setSelectedDay(null);
+    }
+
+    const title = (
+        <div className="flex items-center gap-1.5">
+            <WeekArrow direction="previous" onClick={previous ? () => showWeek(previous) : null}/>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3.5 gap-y-1">
+                <h1 className="serif m-0 text-[30px] leading-[34px] xl:text-[36px] xl:leading-10">
+                    Semaine du {formatShortDate(monday)}
+                </h1>
+                <div className="ital text-[19px] text-muted xl:text-[19px]">au {formatLongDate(sunday)}</div>
+                {!currentWeek &&
+                    <>
+                        <span className="rounded-md bg-butter px-1.5 py-0.5 text-xs font-semibold">
+                            {kind === "prepared" ? "Préparée" : "Passée"}
+                        </span>
+                        <button type="button" onClick={() => showWeek(null)}
+                                className="text-xs font-semibold text-ink underline underline-offset-2">
+                            Revenir à cette semaine
+                        </button>
+                    </>
+                }
+            </div>
+            <WeekArrow direction="next" onClick={next ? () => showWeek(next) : null}/>
+        </div>
+    );
+
     if (!loaded) {
         return (
-            <div className="flex items-center gap-3 py-10 text-muted" role="status">
-                <Spinner/> Chargement de ta semaine…
+            <div className="flex flex-col gap-6 pt-1 xl:pt-4">
+                {/* Au tout premier chargement, rien à naviguer encore : le titre attend. */}
+                {(shownWeek !== null || weeks.length > 0) && title}
+                <div className="flex items-center gap-3 py-10 text-muted" role="status">
+                    <Spinner/> Chargement de ta semaine…
+                </div>
             </div>
         );
     }
-
-    const today = new Date();
-    const monday = mondayOf(planning ? new Date(planning.timestamp) : today);
-    const sunday = addDays(monday, 6);
 
     const priorityByName = new Map((planning?.activities ?? []).map((a) => [a.name, a.priority]));
     const priorityOf = (name: string) => priorityByName.get(name) ?? 2;
@@ -151,7 +211,8 @@ export default function WeeklyPlanning() {
     const percent = planned ? Math.round(done / planned * 100) : 0;
 
     function toggle(slot: ScheduleInterface) {
-        if (!planning || generating) return;
+        // Seule la semaine en cours se coche : une passée est figée, la préparée n'a pas commencé.
+        if (!planning || generating || !currentWeek) return;
         const status = slot.status === "done" ? "pending" : "done";
         // Optimiste : la coche apparaît tout de suite, et revient si l'API refuse.
         setPlanning((p) => ({
@@ -165,8 +226,6 @@ export default function WeeklyPlanning() {
             });
     }
 
-    // Calculé au rendu : suffisant pour une page qu'on recharge à chaque action.
-    const currentWeek = planning !== null && isCurrentWeek(planning.timestamp, today);
     const weekday = weekdayFromDate(today);
     const nowMinutes = today.getHours() * 60 + today.getMinutes();
 
@@ -176,12 +235,15 @@ export default function WeeklyPlanning() {
      * passée est gardée d'un bloc, son après-midi n'a rien à verrouiller.
      */
     function canLock(slot: ScheduleInterface): boolean {
-        return currentWeek && planning !== null && sessionPartsOf(planning.schedule, slot)
-            .every((part) => !isFrozen({...part, locked: false}, weekday, nowMinutes));
+        if (planning === null) return false;
+        const parts = sessionPartsOf(planning.schedule, slot);
+        // La semaine préparée n'a pas commencé : rien n'y est passé, seul un créneau fait serait gardé.
+        if (kind === "prepared") return parts.every((part) => part.status !== "done");
+        return currentWeek && parts.every((part) => !isFrozen({...part, locked: false}, weekday, nowMinutes));
     }
 
     function lock(slot: ScheduleInterface) {
-        if (!planning || generating) return;
+        if (!planning || generating || kind === "past") return;
         // Les deux moitiés d'une séance coupée se verrouillent ensemble.
         const ids = sessionPartsOf(planning.schedule, slot).map((s) => s._id);
         const locked = slot.locked !== true;
@@ -199,7 +261,7 @@ export default function WeeklyPlanning() {
     /** Le ▶ des créneaux du jour : lancer un focus, ou rouvrir celui qui tourne. */
     const activeFocus = focusState && focusState.status !== "finished" ? focusState : null;
     const focus: SlotFocus = {
-        canFocus: (slot) => planning !== null && canFocus(slot, planning, today),
+        canFocus: (slot) => currentWeek && planning !== null && canFocus(slot, planning, today),
         isFocused: (slot) => isFocusOn(activeFocus?.target, slot),
         onFocus: (slot) => {
             if (!planning || generating) return;
@@ -207,15 +269,6 @@ export default function WeeklyPlanning() {
             else focusLauncher.launch(targetOf(slot, planning));
         },
     };
-
-    const title = (
-        <div className="flex flex-wrap items-baseline gap-x-3.5">
-            <h1 className="serif m-0 text-[30px] leading-[34px] xl:text-[36px] xl:leading-10">
-                Semaine du {formatShortDate(monday)}
-            </h1>
-            <div className="ital text-[19px] text-muted xl:text-[19px]">au {formatLongDate(sunday)}</div>
-        </div>
-    );
 
     const legend = (
         <div className="flex items-center gap-3.5">
@@ -267,6 +320,7 @@ export default function WeeklyPlanning() {
         </div>
     );
 
+    // `stale` est déjà faux hors de la semaine en cours.
     const staleBanner = stale &&
         <div role="status" className="flex items-center gap-2.5 rounded-2xl bg-butter px-4 py-2.5 text-sm xl:py-1.5">
             <AlertIcon className="hidden shrink-0 xl:block"/>
@@ -312,7 +366,11 @@ export default function WeeklyPlanning() {
                         </ul>
                     </div>
                     <div className="flex items-center gap-2 self-start">
-                        <GenerateButton compact theme="secondary" label="Relancer"/>
+                        {/* Une semaine passée ne se regénère pas ; la préparée se regénère directement. */}
+                        {kind !== "past" &&
+                            <GenerateButton compact theme="secondary" label="Relancer"
+                                            week={kind === "prepared" ? "next" : "current"}/>
+                        }
                         <HideButton onClick={() => hide("violations")}/>
                     </div>
                 </div>
@@ -379,7 +437,8 @@ export default function WeeklyPlanning() {
                     {days.map((d) =>
                         <DayTimeline key={d.day} day={d.day} label={d.label} date={d.date} isToday={d.isToday}
                                      slots={d.slots} seed={planning._id} lunch={lunch} priorityOf={priorityOf} onToggle={toggle}
-                                     canLock={canLock} onLock={lock} focus={focus} disabled={generating}/>
+                                     canLock={canLock} onLock={lock} focus={focus} disabled={generating}
+                                     readOnly={!currentWeek}/>
                     )}
                 </div>
             </div>
@@ -424,7 +483,7 @@ export default function WeeklyPlanning() {
                     <div className="-mt-0.5">{legend}</div>
                     <DayItems slots={selected.slots} day={selected.day} seed={planning._id} lunch={lunch}
                               priorityOf={priorityOf} onToggle={toggle} canLock={canLock} onLock={lock} focus={focus}
-                              disabled={generating} large/>
+                              disabled={generating} readOnly={!currentWeek} large/>
                     {selected.slots.length === 0 &&
                         <div className="ital px-0.5 py-2 text-xl text-muted">Journée libre.</div>
                     }

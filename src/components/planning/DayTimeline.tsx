@@ -69,7 +69,7 @@ export interface SlotFocus {
     onFocus: (slot: ScheduleInterface) => void,
 }
 
-export function DayItems({slots, day, seed, lunch, priorityOf, onToggle, canLock, onLock, focus, disabled, large, onDark}: {
+export function DayItems({slots, day, seed, lunch, priorityOf, onToggle, canLock, onLock, focus, disabled, readOnly, large, onDark}: {
     slots: ScheduleInterface[],
     day: string,
     /** Le planning : le tirage des idées en dépend, pour varier d'une semaine à l'autre. */
@@ -84,6 +84,8 @@ export function DayItems({slots, day, seed, lunch, priorityOf, onToggle, canLock
     focus?: SlotFocus,
     /** Vrai pendant une génération : rien ne se coche ni ne se verrouille. */
     disabled?: boolean,
+    /** Vrai hors de la semaine en cours : les créneaux ne se cochent pas, le cadenas reste à `canLock`. */
+    readOnly?: boolean,
     large?: boolean,
     onDark?: boolean,
 }) {
@@ -92,6 +94,7 @@ export function DayItems({slots, day, seed, lunch, priorityOf, onToggle, canLock
             const focused = focus?.isFocused(item.slot) ?? false;
             return <SlotRow key={item.slot._id} slot={item.slot} day={day} priority={priorityOf(item.slot.activity)}
                             onToggle={onToggle} canLock={canLock(item.slot)} onLock={onLock} disabled={disabled}
+                            readOnly={readOnly}
                             canFocus={focused || (focus?.canFocus(item.slot) ?? false)} focused={focused}
                             onFocus={focus?.onFocus} large={large}/>;
         }
@@ -128,7 +131,7 @@ function heightFor(slot: ScheduleInterface): string {
  * surtout au doigt. Sur bureau, le cadenas en haut et le ▶ en bas ; sur
  * mobile, côte à côte.
  */
-function SlotRow({slot, day, priority, onToggle, canLock, onLock, canFocus, focused, onFocus, disabled, large}: {
+function SlotRow({slot, day, priority, onToggle, canLock, onLock, canFocus, focused, onFocus, disabled, readOnly, large}: {
     slot: ScheduleInterface,
     day: string,
     priority: number,
@@ -141,6 +144,8 @@ function SlotRow({slot, day, priority, onToggle, canLock, onLock, canFocus, focu
     focused?: boolean,
     onFocus?: (slot: ScheduleInterface) => void,
     disabled?: boolean,
+    /** La coche seule est inactive ; le cadenas et le ▶ suivent `disabled`. */
+    readOnly?: boolean,
     large?: boolean,
 }) {
     const locked = slot.locked === true;
@@ -149,7 +154,7 @@ function SlotRow({slot, day, priority, onToggle, canLock, onLock, canFocus, focu
         <div className="relative">
             <SlotButton slot={slot} day={day} priority={priority} onToggle={onToggle} large={large}
                         locked={locked} reserveCorner={canLock || locked} reserveFocus={withFocus}
-                        focused={focused} disabled={disabled}/>
+                        focused={focused} disabled={disabled || readOnly}/>
             {canLock &&
                 <button
                     type="button"
@@ -251,7 +256,7 @@ export function SlotButton({slot, day, priority, onToggle, large, locked, reserv
 }
 
 /** Colonne d'un jour, sur bureau. Le jour même est prune. */
-export default function DayTimeline({day, label, date, isToday, slots, seed, lunch, priorityOf, onToggle, canLock, onLock, focus, disabled}: {
+export default function DayTimeline({day, label, date, isToday, slots, seed, lunch, priorityOf, onToggle, canLock, onLock, focus, disabled, readOnly}: {
     day: string,
     label: string,
     date: string,
@@ -265,6 +270,7 @@ export default function DayTimeline({day, label, date, isToday, slots, seed, lun
     onLock: (slot: ScheduleInterface) => void,
     focus?: SlotFocus,
     disabled?: boolean,
+    readOnly?: boolean,
 }) {
     return (
         <section
@@ -279,7 +285,8 @@ export default function DayTimeline({day, label, date, isToday, slots, seed, lun
                 {isToday && <div className="ital text-base">aujourd’hui</div>}
             </div>
             <DayItems slots={slots} day={day} seed={seed} lunch={lunch} priorityOf={priorityOf} onToggle={onToggle}
-                      canLock={canLock} onLock={onLock} focus={focus} disabled={disabled} onDark={isToday}/>
+                      canLock={canLock} onLock={onLock} focus={focus} disabled={disabled} readOnly={readOnly}
+                      onDark={isToday}/>
             {slots.length === 0 &&
                 <div className={`ital px-1 text-[15px] ${isToday ? "text-line" : "text-muted"}`}>Journée libre.</div>
             }

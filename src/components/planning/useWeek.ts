@@ -56,6 +56,8 @@ interface WeekData {
     activities: ActivityInterface[];
     weeks: string[];
     loaded: boolean;
+    /** La semaine demandée pour ces données : une autre semaine n'est pas encore chargée. */
+    week?: string;
 }
 
 /**
@@ -83,6 +85,7 @@ export function useWeek(week?: string) {
                 activities: activities.status === "fulfilled" ? activities.value.data : [],
                 weeks: weeks.status === "fulfilled" ? weeks.value.weeks : [],
                 loaded: true,
+                week,
             });
         });
         return () => {
@@ -107,6 +110,9 @@ export function useWeek(week?: string) {
 
     return {
         ...data,
+        // Changer de semaine : les données de la précédente ne s'affichent pas sous le nouveau titre.
+        // Les semaines planifiées, elles, restent valables pendant le chargement.
+        loaded: data.loaded && data.week === week,
         // Les activités se comparent à la semaine en cours seulement : une autre semaine est figée.
         stale: (!week || week === weekKeyOf(new Date()))
             && isWeekStale(data.planning, data.activities),
