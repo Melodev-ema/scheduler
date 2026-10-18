@@ -17,13 +17,20 @@ export function proxy(request: NextRequest) {
     // en production.
     const isDev = process.env.NODE_ENV === 'development';
 
+    // L'overlay de développement de Next injecte ses `<style>` sans nonce.
+    // `'unsafe-inline'` est ignoré dès qu'un nonce figure dans la directive :
+    // en développement, il remplace donc le nonce au lieu de s'y ajouter.
+    // Conséquence : un style injecté par l'app (l'entrée par défaut de
+    // `react-toastify`, par exemple) n'est plus signalé qu'en production.
+    const styleSrc = isDev ? "'unsafe-inline'" : `'nonce-${nonce}'`;
+
     // `upgrade-insecure-requests` est délibérément absent : l'instance est
     // servie en http sur localhost, et cette directive réécrirait ses propres
     // requêtes en https. À rajouter le jour du déploiement en HTTPS.
     const csp = `
         default-src 'self';
         script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''};
-        style-src 'self' 'nonce-${nonce}';
+        style-src 'self' ${styleSrc};
         img-src 'self' blob: data:;
         font-src 'self';
         connect-src 'self';
