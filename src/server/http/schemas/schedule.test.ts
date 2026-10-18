@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {weekQuerySchema} from './schedule';
+import {generateBodySchema, weekQuerySchema} from './schedule';
 
 describe('weekQuerySchema', () => {
     it('transforme une semaine valide en Date', () => {
@@ -24,5 +24,31 @@ describe('weekQuerySchema', () => {
         if (!parsed.success) {
             expect(parsed.error.issues.map(issue => issue.message).join()).toMatch(/semaine invalide/);
         }
+    });
+});
+
+describe('generateBodySchema', () => {
+    it('refuse un corps absent (la route passe {} à sa place)', () => {
+        expect(generateBodySchema.safeParse(undefined).success).toBe(false);
+    });
+
+    it('prend la semaine en cours par défaut', () => {
+        const parsed = generateBodySchema.safeParse({});
+        expect(parsed.success).toBe(true);
+        if (parsed.success) {
+            expect(parsed.data.week).toBe('current');
+        }
+    });
+
+    it('accepte la semaine suivante', () => {
+        const parsed = generateBodySchema.safeParse({week: 'next'});
+        expect(parsed.success).toBe(true);
+        if (parsed.success) {
+            expect(parsed.data.week).toBe('next');
+        }
+    });
+
+    it('refuse une autre semaine', () => {
+        expect(generateBodySchema.safeParse({week: 'later'}).success).toBe(false);
     });
 });

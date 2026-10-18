@@ -41,3 +41,8 @@ export const weekQuerySchema = z.object({
         return monday;
     }),
 });
+
+/** Corps de `POST /api/generate_weekly_planning` ; la route passe `{}` pour un corps absent : la semaine en cours. */
+export const generateBodySchema = z.object({
+    week: z.enum(['current', 'next']).default('current'),
+});

@@ -1,7 +1,8 @@
 import type {ZodError} from 'zod';
 
 /**
- * Forme unique des erreurs de l'API : {error: "…"}. Le détail d'une exception
+ * Forme unique des erreurs de l'API : {error: "…"}, plus d'éventuels champs `extra`
+ * qu'un client lit pour décider de la suite. Le détail d'une exception
  * — message Mongo, réponse d'un service tiers, trace — reste côté serveur : il renseigne
  * un attaquant bien plus qu'il n'aide l'utilisatrice.
  *
@@ -10,8 +11,14 @@ import type {ZodError} from 'zod';
  * contrat des Route Handlers, et accessoirement ce qui les rend testables
  * sans serveur.
  */
-export function fail(status: number, message: string, headers?: HeadersInit): Response {
-    return Response.json({error: message}, {status, headers});
+export function fail(
+    status: number,
+    message: string,
+    headers?: HeadersInit,
+    extra?: Record<string, unknown>,
+): Response {
+    // `extra` précise l'erreur pour le client ; il ne remplace jamais son message.
+    return Response.json({...extra, error: message}, {status, headers});
 }
 
 /**

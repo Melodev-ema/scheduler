@@ -15,6 +15,19 @@ describe('fail', () => {
 
         expect(response.headers.get('Retry-After')).toBe('900');
     });
+
+    it('ajoute des champs au corps', async () => {
+        const response = fail(409, 'x', undefined, {nextWeek: '2026-10-19'});
+
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toEqual({error: 'x', nextWeek: '2026-10-19'});
+    });
+
+    it('garde toujours son propre message dans error', async () => {
+        const body = await fail(409, 'x', undefined, {error: 'y'}).json();
+
+        expect(body.error).toBe('x');
+    });
 });
 
 describe('invalidInput', () => {
