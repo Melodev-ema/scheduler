@@ -35,6 +35,8 @@ export interface PlanningInterface {
     note?: string;
     /** Pause au moment de la génération ; `null` sans pause, absente sur les anciens plannings. */
     lunchBreak?: LunchBreak | null;
+    /** Lundi 00:00 (heure locale) de la semaine du planning ; absent avant le rattrapage. */
+    weekStart?: Date | string;
     timestamp: Date;
 }
 
@@ -79,6 +81,8 @@ const PlanningSchema = new mongoose.Schema({
     note: {type: String, default: ""},
     // Pas de default : absent = ancien planning (pause par défaut), null = pas de pause.
     lunchBreak: {type: LunchBreakSchema},
+    // Pas de `required` : les anciens plannings l'obtiennent par `backfillWeekStart`.
+    weekStart: {type: Date, index: true},
     timestamp: {type: Date, default: Date.now},
 });
 

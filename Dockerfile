@@ -21,7 +21,8 @@ WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    TZ=Europe/Paris
 # `server.js` ne sert ni `public` ni `.next/static` tant qu'on ne les copie
 # pas à côté de lui.
 COPY --from=build --chown=node:node /app/.next/standalone ./
