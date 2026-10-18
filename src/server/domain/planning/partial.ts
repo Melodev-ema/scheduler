@@ -172,6 +172,23 @@ export function excludePlacedTasks<T extends {_id: {toString(): string}}>(
 }
 
 /**
+ * Pour préparer une semaine à venir : une tâche qui a encore un créneau non fait
+ * et pas fini (à venir ou en cours) est déjà placée. Un créneau verrouillé fini
+ * sans être fait ne la retient pas — elle est manquée et revient.
+ */
+export function excludeUpcomingTasks<T extends {_id: {toString(): string}}>(
+    tasks: readonly T[],
+    schedule: readonly PlacedSlot[],
+    today: Weekday,
+    nowMinutes: number,
+): T[] {
+    const upcoming = new Set(schedule
+        .filter((slot) => slot.taskId !== undefined && slot.status !== DONE && !isOver(slot, today, nowMinutes))
+        .map(taskKey));
+    return tasks.filter((task) => !upcoming.has(String(task._id)));
+}
+
+/**
  * Les créneaux figés à recopier, moins ceux des tâches renvoyées au modèle :
  * une tâche manquée est replanifiée, et son ancien créneau disparaît — sinon
  * elle apparaîtrait deux fois dans la semaine.

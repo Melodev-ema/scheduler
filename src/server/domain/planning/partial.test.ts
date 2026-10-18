@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
-    busySlotsOf, compareSlots, excludePlacedTasks, withoutResentTasks, frozenSlots, isCurrentWeek, isFrozen, PlacedSlot,
+    busySlotsOf, compareSlots, excludePlacedTasks, excludeUpcomingTasks, withoutResentTasks, frozenSlots, isCurrentWeek, isFrozen, PlacedSlot,
     remainingRequests, remainingWindows, sessionPartsOf, weekStartOf,
 } from '@/server/domain/planning/partial';
 import {DayWindow} from '@/server/domain/planning/buildDayWindows';
@@ -240,6 +240,38 @@ describe('excludePlacedTasks', () => {
     it('compare les identifiants par leur texte', () => {
         const id = {toString: () => 'a'};
         expect(excludePlacedTasks([{_id: id}], [placed({taskId: 'a', locked: true})], TODAY, NOW)).toEqual([]);
+    });
+});
+
+describe('excludeUpcomingTasks', () => {
+    const tasks = [{_id: 'a'}, {_id: 'b'}, {_id: 'c'}];
+    // Dimanche 15:47.
+    const SUNDAY: Weekday = 'dimanche';
+    const SUNDAY_NOW = 15 * 60 + 47;
+
+    it('retire une tâche dont le créneau est encore à venir', () => {
+        const upcoming = placed({day: 'dimanche', startTime: '17:00', endTime: '18:00', taskId: 'a'});
+        expect(excludeUpcomingTasks(tasks, [upcoming], SUNDAY, SUNDAY_NOW)).toEqual([{_id: 'b'}, {_id: 'c'}]);
+    });
+
+    it('retire une tâche en cours', () => {
+        const running = placed({day: 'dimanche', startTime: '15:30', endTime: '16:30', taskId: 'a'});
+        expect(excludeUpcomingTasks(tasks, [running], SUNDAY, SUNDAY_NOW)).toEqual([{_id: 'b'}, {_id: 'c'}]);
+    });
+
+    it('garde une tâche dont le créneau verrouillé est fini sans être fait', () => {
+        const missed = placed({day: 'samedi', taskId: 'a', locked: true});
+        expect(excludeUpcomingTasks(tasks, [missed], SUNDAY, SUNDAY_NOW)).toEqual(tasks);
+    });
+
+    it('garde une tâche dont le créneau est fait', () => {
+        const done = placed({day: 'dimanche', startTime: '17:00', endTime: '18:00', taskId: 'a', status: 'done'});
+        expect(excludeUpcomingTasks(tasks, [done], SUNDAY, SUNDAY_NOW)).toEqual(tasks);
+    });
+
+    it('ne retire aucune tâche sans créneau', () => {
+        expect(excludeUpcomingTasks(tasks, [placed({day: 'dimanche', startTime: '17:00', endTime: '18:00'})], SUNDAY, SUNDAY_NOW))
+            .toEqual(tasks);
     });
 });
 

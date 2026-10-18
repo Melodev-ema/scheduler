@@ -1,4 +1,5 @@
-import {isCurrentWeek} from '@/server/domain/planning/partial';
+import {weekStartOf} from '@/server/domain/planning/partial';
+import {planningWeekOf} from '@/server/domain/planning/week';
 import {weekdayFromDate} from '@/server/domain/planning/days';
 import {isValidTime, parseTimeToMinutes} from '@/server/domain/planning/time';
 import type {FocusTarget, SlotTarget} from '@/server/domain/focus/cycle';
@@ -16,6 +17,7 @@ export interface FocusableSlot {
 export interface FocusablePlanning {
     _id: string;
     timestamp: Date | string;
+    weekStart?: Date | string;
     activities?: {name: string; priority: number}[];
 }
 
@@ -25,7 +27,7 @@ export interface FocusablePlanning {
  */
 export function canFocus(slot: FocusableSlot, planning: FocusablePlanning, now: Date): boolean {
     if (slot.status === 'done') return false;
-    if (!isCurrentWeek(planning.timestamp, now) || slot.day !== weekdayFromDate(now)) return false;
+    if (planningWeekOf(planning).getTime() !== weekStartOf(now).getTime() || slot.day !== weekdayFromDate(now)) return false;
     if (!isValidTime(slot.startTime) || !isValidTime(slot.endTime)) return false;
     return now.getHours() * 60 + now.getMinutes() < parseTimeToMinutes(slot.endTime);
 }
