@@ -6,6 +6,7 @@ import {formatSlotTime} from "@/components/planning/DayTimeline";
 import {priorityStyle} from "@/components/uiComponents/priority";
 import {weekdayFromDate} from "@/server/domain/planning/days";
 import {isCurrentWeek} from "@/server/domain/planning/partial";
+import {planningWeekOf} from "@/server/domain/planning/week";
 import {canFocus, targetOf} from "@/server/domain/focus/target";
 import {useFocusLauncher} from "@/components/focus/SwitchFocusDialog";
 import {BaseButton} from "@/components/uiComponents/BaseButton";
@@ -32,7 +33,7 @@ export default function FocusLauncher({onClose}: { onClose: () => void }) {
     // Les créneaux d'aujourd'hui : faits (grisés) ou encore possibles. Les finis non faits n'y sont pas.
     const now = new Date();
     const today = weekdayFromDate(now);
-    const slots = planning && isCurrentWeek(planning.timestamp, now)
+    const slots = planning && isCurrentWeek(planningWeekOf(planning), now)
         ? planning.schedule
             .filter((slot) => slot.day === today && (slot.status === "done" || canFocus(slot, planning, now)))
             .sort((a, b) => a.startTime.localeCompare(b.startTime))

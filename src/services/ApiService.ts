@@ -27,10 +27,11 @@ export interface ApiServiceInterface {
 
 /**
  * Même message qu'avant, plus le statut — un appelant peut distinguer un 409
- * d'une panne — et `detail`, le champ `error` que renvoie l'API, s'il y en a un.
+ * d'une panne — et `detail`, le champ `error` que renvoie l'API, s'il y en a un ;
+ * `body` est le corps JSON entier de l'erreur (un 409 y porte des champs en plus).
  */
 export class HttpError extends Error {
-    constructor(readonly status: number, message: string, readonly detail?: string) {
+    constructor(readonly status: number, message: string, readonly detail?: string, readonly body?: unknown) {
         super(message);
         this.name = 'HttpError';
     }
@@ -68,10 +69,14 @@ export class ApiService {
         });
 
         if (!response.ok) {
-            const detail = await response.json()
-                .then((body: { error?: unknown }) => typeof body?.error === 'string' ? body.error : undefined)
-                .catch(() => undefined);
-            throw new HttpError(response.status, `HTTP error! status: ${response.status} ${response.statusText}`, detail);
+            const errorBody: unknown = await response.json().catch(() => undefined);
+            const error = (errorBody as { error?: unknown } | null | undefined)?.error;
+            throw new HttpError(
+                response.status,
+                `HTTP error! status: ${response.status} ${response.statusText}`,
+                typeof error === 'string' ? error : undefined,
+                errorBody,
+            );
         }
 
         return (await response.json()) as Res;
