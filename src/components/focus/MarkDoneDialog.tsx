@@ -39,6 +39,9 @@ export default function MarkDoneDialog({state}: { state: FocusState & { target: 
             if (error instanceof HttpError && error.status === 404) {
                 toast.info("Ce créneau n’est plus dans ta semaine.");
                 clearFocus();
+            } else if (error instanceof HttpError && error.status === 409) {
+                toast.info("Ce créneau appartient à une semaine passée : il ne se coche plus.");
+                clearFocus();
             } else {
                 toast.error("Impossible d’enregistrer ce créneau.");
             }
