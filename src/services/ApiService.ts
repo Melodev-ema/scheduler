@@ -58,26 +58,23 @@ export class ApiService {
             ...headers,
         };
 
-        try {
-            const response = await fetch(url, {
-                method,
-                headers: defaultHeaders,
-                body: contentBody,
-                signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
-            });
+        // Pas de console.error ici : un 409 ou un 404 fait partie du contrat que
+        // l'appelant traite, et l'overlay de dev afficherait chacun comme une erreur.
+        const response = await fetch(url, {
+            method,
+            headers: defaultHeaders,
+            body: contentBody,
+            signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+        });
 
-            if (!response.ok) {
-                const detail = await response.json()
-                    .then((body: { error?: unknown }) => typeof body?.error === 'string' ? body.error : undefined)
-                    .catch(() => undefined);
-                throw new HttpError(response.status, `HTTP error! status: ${response.status} ${response.statusText}`, detail);
-            }
-
-            return (await response.json()) as Res;
-        } catch (error) {
-            console.error('Error:', error);
-            throw error;
+        if (!response.ok) {
+            const detail = await response.json()
+                .then((body: { error?: unknown }) => typeof body?.error === 'string' ? body.error : undefined)
+                .catch(() => undefined);
+            throw new HttpError(response.status, `HTTP error! status: ${response.status} ${response.statusText}`, detail);
         }
+
+        return (await response.json()) as Res;
     }
 
     public async get<Res>(endpoint: string, headers?: Record<string, string>): Promise<Res> {
