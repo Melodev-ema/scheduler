@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
-    busySlotsOf, compareSlots, excludePlacedTasks, excludeUpcomingTasks, withoutResentTasks, frozenSlots, isCurrentWeek, isFrozen, PlacedSlot,
+    busySlotsOf, compareSlots, excludePlacedTasks, excludeTasksIn, excludeUpcomingTasks, withoutResentTasks, frozenSlots, isCurrentWeek, isFrozen, PlacedSlot,
     remainingRequests, remainingWindows, sessionPartsOf, weekStartOf,
 } from '@/server/domain/planning/partial';
 import {DayWindow} from '@/server/domain/planning/buildDayWindows';
@@ -272,6 +272,18 @@ describe('excludeUpcomingTasks', () => {
     it('ne retire aucune tâche sans créneau', () => {
         expect(excludeUpcomingTasks(tasks, [placed({day: 'dimanche', startTime: '17:00', endTime: '18:00'})], SUNDAY, SUNDAY_NOW))
             .toEqual(tasks);
+    });
+});
+
+describe('excludeTasksIn', () => {
+    const tasks = [{_id: 'a'}, {_id: 'b'}];
+
+    it('retire une tâche qui a un créneau non fait dans la semaine donnée', () => {
+        expect(excludeTasksIn(tasks, [placed({taskId: 'a'})])).toEqual([{_id: 'b'}]);
+    });
+
+    it('garde une tâche dont le créneau est fait, ou sans créneau', () => {
+        expect(excludeTasksIn(tasks, [placed({taskId: 'a', status: 'done'}), placed()])).toEqual(tasks);
     });
 });
 

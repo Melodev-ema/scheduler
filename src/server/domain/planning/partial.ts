@@ -189,6 +189,20 @@ export function excludeUpcomingTasks<T extends {_id: {toString(): string}}>(
 }
 
 /**
+ * Une tâche qui a un créneau non fait dans cette semaine (déjà préparée, donc
+ * toute à venir) y est placée : elle ne doit pas l'être aussi dans une autre.
+ */
+export function excludeTasksIn<T extends {_id: {toString(): string}}>(
+    tasks: readonly T[],
+    schedule: readonly PlacedSlot[],
+): T[] {
+    const held = new Set(schedule
+        .filter((slot) => slot.taskId !== undefined && slot.status !== DONE)
+        .map(taskKey));
+    return tasks.filter((task) => !held.has(String(task._id)));
+}
+
+/**
  * Les créneaux figés à recopier, moins ceux des tâches renvoyées au modèle :
  * une tâche manquée est replanifiée, et son ancien créneau disparaît — sinon
  * elle apparaîtrait deux fois dans la semaine.

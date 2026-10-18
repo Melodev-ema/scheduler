@@ -26,7 +26,7 @@ import {
 } from '@/server/domain/planning/lunchBreak';
 import {isWeekday, weekdayFromDate} from '@/server/domain/planning/days';
 import {
-    busySlotsOf, compareSlots, excludePlacedTasks, excludeUpcomingTasks, frozenSlots, withoutResentTasks,
+    busySlotsOf, compareSlots, excludePlacedTasks, excludeTasksIn, excludeUpcomingTasks, frozenSlots, withoutResentTasks,
     remainingRequests, remainingWindows, weekStartOf,
 } from '@/server/domain/planning/partial';
 import {nextWeekStart, weekKeyOf} from '@/server/domain/planning/week';
@@ -108,13 +108,17 @@ export async function POST(request: NextRequest) {
         const now = new Date();
         const {planNow, weekStart} = planTarget(week, now);
 
-        const [activities, allTasks, settings, latest, currentWeek] = await Promise.all([
+        const [activities, allTasks, settings, latest, currentWeek, preparedWeek] = await Promise.all([
             Activity.find({}).lean<ActivityInput[]>(),
             Task.find({done: false}).lean<Array<TaskInput & {_id: Types.ObjectId}>>(),
             Settings.findOne().lean<SettingsInterface>(),
             latestPlanningOf(weekStart).lean<PlanningInterface>(),
             // Pour la semaine suivante : la semaine en cours, où une tâche peut encore avoir un créneau à venir.
             week === 'next' ? latestPlanningOf(weekStartOf(now)).lean<PlanningInterface>() : null,
+            // Pour la semaine en cours : la semaine suivante déjà préparée, dont les tâches ne se replacent pas ici.
+            week === 'current'
+                ? latestPlanningOf(nextWeekStart(now)).select('schedule').lean<Pick<PlanningInterface, 'schedule'>>()
+                : null,
         ]);
 
         // Un réglage invalide (édité à la main en base) ne doit jamais faire échouer une génération.
@@ -140,6 +144,9 @@ export async function POST(request: NextRequest) {
         // Jugé à l'heure réelle : c'est la semaine en cours.
         if (currentWeek) {
             tasks = excludeUpcomingTasks(tasks, currentWeek.schedule, weekdayFromDate(now), minutesOf(now));
+        }
+        if (preparedWeek) {
+            tasks = excludeTasksIn(tasks, preparedWeek.schedule);
         }
         // Une tâche manquée revient : son ancien créneau ne doit pas rester à côté du nouveau.
         const frozen = withoutResentTasks(candidates, tasks);
