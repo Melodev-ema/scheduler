@@ -68,17 +68,23 @@ function progressOf(planning: PlanningInterface): ProgressRow[] {
  */
 type Dismissable = "violations" | "note";
 
-function readHidden(kind: Dismissable): string | null {
+const MAX_HIDDEN = 10;
+
+/** Les plannings masqués pour ce bandeau, du plus ancien au plus récent (l'ancien format stockait un seul id). */
+function readHidden(kind: Dismissable): string[] {
     try {
-        return localStorage.getItem(`scheduler:hidden-${kind}`);
+        const raw = localStorage.getItem(`scheduler:hidden-${kind}`);
+        if (!raw) return [];
+        const parsed: unknown = raw.startsWith("[") ? JSON.parse(raw) : [raw];
+        return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
     } catch {
-        return null;
+        return [];
     }
 }
 
-function writeHidden(kind: Dismissable, planningId: string) {
+function writeHidden(kind: Dismissable, ids: string[]) {
     try {
-        localStorage.setItem(`scheduler:hidden-${kind}`, planningId);
+        localStorage.setItem(`scheduler:hidden-${kind}`, JSON.stringify(ids));
     } catch {
         // Stockage indisponible : le bandeau reste masqué jusqu'au rechargement.
     }
@@ -129,7 +135,7 @@ export default function WeeklyPlanning() {
     const {planning, loaded, stale, setPlanning, reload, generating, weeks} = useWeek(shownWeek ?? undefined);
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
     const [noteOpen, setNoteOpen] = useState(false);
-    const [hidden, setHidden] = useState<Partial<Record<Dismissable, string>>>({});
+    const [hidden, setHidden] = useState<Partial<Record<Dismissable, string[]>>>({});
     const focusState = useFocus().state;
     const focusLauncher = useFocusLauncher();
     const router = useRouter();
@@ -328,12 +334,13 @@ export default function WeeklyPlanning() {
         </div>;
 
     const isHidden = (kind: Dismissable) => !!planning
-        && (hidden[kind] === planning._id || readHidden(kind) === planning._id);
+        && ((hidden[kind] ?? []).includes(planning._id) || readHidden(kind).includes(planning._id));
 
     function hide(kind: Dismissable) {
         if (!planning) return;
-        writeHidden(kind, planning._id);
-        setHidden((previous) => ({...previous, [kind]: planning._id}));
+        const ids = [...readHidden(kind).filter((id) => id !== planning._id), planning._id].slice(-MAX_HIDDEN);
+        writeHidden(kind, ids);
+        setHidden((previous) => ({...previous, [kind]: [...(previous[kind] ?? []).filter((id) => id !== planning._id), planning._id]}));
     }
 
     const noteBlock = planning?.note && !isHidden("note") &&
