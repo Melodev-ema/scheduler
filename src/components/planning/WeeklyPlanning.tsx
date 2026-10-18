@@ -1,6 +1,6 @@
 "use client";
 
-import {useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import Link from "next/link";
 import {toast} from "react-toastify/unstyled";
 import {PlanningInterface} from "@/models/Planning";
@@ -139,6 +139,26 @@ export default function WeeklyPlanning() {
     const focusState = useFocus().state;
     const focusLauncher = useFocusLauncher();
     const router = useRouter();
+
+    // Une page laissée ouverte à travers le lundi 00:00 : la semaine « en cours » change,
+    // le planning chargé est celui de la précédente. On recharge au changement de clé.
+    const [clockWeek, setClockWeek] = useState(() => weekKeyOf(mondayOf(new Date())));
+    useEffect(() => {
+        const check = () => setClockWeek(weekKeyOf(mondayOf(new Date())));
+        const timer = window.setInterval(check, 30_000);
+        document.addEventListener("visibilitychange", check);
+        return () => {
+            window.clearInterval(timer);
+            document.removeEventListener("visibilitychange", check);
+        };
+    }, []);
+    const seenWeek = useRef(clockWeek);
+    useEffect(() => {
+        if (seenWeek.current !== clockWeek) {
+            seenWeek.current = clockWeek;
+            reload();
+        }
+    }, [clockWeek, reload]);
 
     const today = new Date();
     const monday = (shownWeek ? parseWeekKey(shownWeek) : null) ?? mondayOf(today);
