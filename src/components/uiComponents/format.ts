@@ -67,7 +67,10 @@ export function formatLongDate(date: Date): string {
 /** « lundi 19 au dimanche 25 octobre » ; sur deux mois : « lundi 26 octobre au dimanche 1 novembre ». */
 export function formatWeekRange(monday: Date): string {
     const sunday = addDays(monday, 6);
-    const dayOf = (date: Date) => date.toLocaleDateString("fr-FR", {weekday: "long", day: "numeric"});
+    const dayOf = (date: Date) => {
+        const weekday = date.toLocaleDateString("fr-FR", {weekday: "long"});
+        return `${weekday} ${date.getDate() === 1 ? "1er" : date.getDate()}`;
+    };
     const monthOf = (date: Date) => date.toLocaleDateString("fr-FR", {month: "long"});
     if (monday.getMonth() === sunday.getMonth()) {
         return `${dayOf(monday)} au ${dayOf(sunday)} ${monthOf(sunday)}`;

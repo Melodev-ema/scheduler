@@ -7,6 +7,10 @@ describe("formatWeekRange", () => {
     });
 
     it("écrit les deux mois quand la semaine en chevauche deux", () => {
-        expect(formatWeekRange(new Date(2026, 9, 26))).toBe("lundi 26 octobre au dimanche 1 novembre");
+        expect(formatWeekRange(new Date(2026, 9, 26))).toBe("lundi 26 octobre au dimanche 1er novembre");
+    });
+
+    it("écrit 1er pour le premier du mois", () => {
+        expect(formatWeekRange(new Date(2026, 5, 1))).toBe("lundi 1er au dimanche 7 juin");
     });
 });
