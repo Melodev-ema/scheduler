@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
     // Rien à gagner à annoncer le framework et sa version.
     poweredByHeader: false,
 
+    // `.next/standalone`, que l'image Docker sert seule, sans `node_modules`
+    // complet. Réservé au build du Dockerfile, qui pose `NEXT_OUTPUT` :
+    // `next start` refuse cette sortie et l'annonce à chaque démarrage.
+    output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
+
     async headers() {
         return [{source: '/:path*', headers: securityHeaders}];
     },

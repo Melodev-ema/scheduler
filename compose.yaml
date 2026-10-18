@@ -1,0 +1,44 @@
+services:
+  mongo:
+    # Version figée : un volume n'est lisible que par une version proche de
+    # celle qui l'a écrit (`featureCompatibilityVersion`). `mongo:8` suit la
+    # dernière 8.x et finirait par refuser ce volume.
+    image: mongo:8.0
+    restart: unless-stopped
+    # Ce Mongo ne sert que l'app conteneurisée. Publié sur 27018, et sur la
+    # boucle locale seulement, pour laisser 27017 au Mongo natif du dev.
+    ports:
+      - "127.0.0.1:${MONGO_PORT:-27018}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Derrière un profil, que `make prod` active.
+  app:
+    profiles: ["app"]
+    build: .
+    image: scheduler:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      # Dans le conteneur, `localhost` n'est plus la machine : Mongo se joint
+      # par le nom de son service. Écrase la valeur des fichiers d'env.
+      MONGODB_URI: mongodb://mongo:27017/scheduler
+    # Les routes n'ont pas encore d'authentification : rien n'est exposé
+    # au-delà de la machine.
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:

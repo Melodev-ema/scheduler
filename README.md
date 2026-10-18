@@ -60,6 +60,20 @@ npm run dev
 L'application répond sur <http://localhost:3000>. MongoDB doit tourner avant toute requête : chaque route de
 l'API commence par s'y connecter.
 
+## Docker
+
+Un `Makefile` regroupe les commandes ; `make` seul les liste.
+
+- **Développement** : `make dev` lance `npm run dev` sur la machine, avec le MongoDB local habituel (27017).
+- **Production** : `make prod` construit l'image (`Dockerfile`, sortie *standalone* de Next) et lance
+  l'application et son propre MongoDB sur <http://localhost:3000>. `make logs` suit ses logs, `make stop`
+  l'arrête, `make down` arrête tous les conteneurs sans perdre les données.
+
+Le MongoDB de Docker est une base **distincte** du MongoDB local : volume `mongo-data`, publié sur
+`127.0.0.1:27018` pour ne pas entrer en conflit avec lui. Les deux ports ne sont publiés que sur `127.0.0.1` :
+l'API n'a pas encore d'authentification. Le conteneur lit `.env` et `.env.local` au démarrage, jamais au
+build, et se connecte au MongoDB de compose quelle que soit la valeur de `MONGODB_URI`.
+
 ## Configuration
 
 Les variables sont lues depuis `.env` et `.env.local` (`.env.local` l'emporte). Seul `.env.example` est
