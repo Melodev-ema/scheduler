@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
-    DEFAULT_LUNCH_BREAK, isSplitAroundLunch, lunchBreakOf, numberParts, overlapsLunch, validateLunchBreak,
+    DEFAULT_LUNCH_BREAK, groupSessions, isSplitAroundLunch, lunchBreakOf, numberParts, overlapsLunch, validateLunchBreak,
 } from '@/server/domain/planning/lunchBreak';
 import {ScheduleSlot} from '@/server/domain/planning/parseSchedule';
 
@@ -130,5 +130,43 @@ describe('numberParts', () => {
     it('trois créneaux d\'une même activité le même jour restent chacun 1/1', () => {
         const slots = [slot(), slot({startTime: '11:30', endTime: '12:30'}), slot({startTime: '14:00', endTime: '15:00'})];
         expect(numberParts(slots, DEFAULT_LUNCH_BREAK).map((p) => p.parts)).toEqual([1, 1, 1]);
+    });
+
+    it('ne prend pas deux tâches de même titre autour de la pause pour une séance coupée', () => {
+        const slots = [
+            slot({activity: 'Appeler', startTime: '11:30', endTime: '12:30', ref: 't1'}),
+            slot({activity: 'Appeler', startTime: '14:00', endTime: '15:00', ref: 't2'}),
+        ];
+        expect(numberParts(slots, DEFAULT_LUNCH_BREAK).map((p) => [p.part, p.parts])).toEqual([[1, 1], [1, 1]]);
+    });
+
+    it('numérote 1/2 et 2/2 les deux moitiés d\'une même tâche', () => {
+        const slots = [
+            slot({activity: 'Appeler', startTime: '11:30', endTime: '12:30', ref: 't1'}),
+            slot({activity: 'Appeler', startTime: '14:00', endTime: '15:00', ref: 't1'}),
+        ];
+        expect(numberParts(slots, DEFAULT_LUNCH_BREAK).map((p) => [p.part, p.parts])).toEqual([[1, 2], [2, 2]]);
+    });
+});
+
+describe('groupSessions', () => {
+    it('groupe les créneaux d\'une activité par jour', () => {
+        const groups = groupSessions([slot(), slot({startTime: '14:00'}), slot({day: 'mardi'})]);
+        expect(groups.map((group) => group.length)).toEqual([2, 1]);
+    });
+
+    it('sépare deux tâches de même titre', () => {
+        const groups = groupSessions([slot({activity: 'Appeler', ref: 't1'}), slot({activity: 'Appeler', ref: 't2'})]);
+        expect(groups.map((group) => group.length)).toEqual([1, 1]);
+    });
+
+    it('sépare une activité et une tâche de même nom', () => {
+        const groups = groupSessions([slot({activity: 'Sport'}), slot({activity: 'Sport', ref: 't1'})]);
+        expect(groups.map((group) => group.length)).toEqual([1, 1]);
+    });
+
+    it('groupe les moitiés d\'une tâche par sa ref, même si le modèle a varié son titre', () => {
+        const groups = groupSessions([slot({activity: 'Appeler', ref: 't1'}), slot({activity: 'Appeler Paul', ref: 't1'})]);
+        expect(groups.map((group) => group.length)).toEqual([2]);
     });
 });

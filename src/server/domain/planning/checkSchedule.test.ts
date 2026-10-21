@@ -227,6 +227,33 @@ describe('checkSchedule, références de tâche', () => {
         ];
         expect(checkSchedule(slots, requests, WINDOWS, DEFAULT_LUNCH_BREAK)).toEqual([]);
     });
+
+    it('accepte deux tâches de même titre le même jour', () => {
+        const requests = [request({name: 'Appeler', ref: 't1'}), request({name: 'Appeler', ref: 't2'})];
+        const slots = [
+            slot({activity: 'Appeler', startTime: '09:00', endTime: '10:00', ref: 't1'}),
+            slot({activity: 'Appeler', startTime: '15:00', endTime: '16:00', ref: 't2'}),
+        ];
+        expect(checkSchedule(slots, requests, WINDOWS, DEFAULT_LUNCH_BREAK)).toEqual([]);
+    });
+
+    it('accepte une activité et une tâche de même nom le même jour', () => {
+        const requests = [request({name: 'Sport'}), request({name: 'Sport', ref: 't1'})];
+        const slots = [
+            slot({activity: 'Sport', startTime: '09:00', endTime: '10:00'}),
+            slot({activity: 'Sport', startTime: '15:00', endTime: '16:00', ref: 't1'}),
+        ];
+        expect(checkSchedule(slots, requests, WINDOWS, DEFAULT_LUNCH_BREAK)).toEqual([]);
+    });
+
+    it('signale toujours deux séances d\'une même tâche le même jour', () => {
+        const slots = [
+            slot({activity: 'Appeler', startTime: '09:00', endTime: '10:00', ref: 't1'}),
+            slot({activity: 'Appeler', startTime: '15:00', endTime: '16:00', ref: 't1'}),
+        ];
+        expect(checkSchedule(slots, [request({name: 'Appeler', ref: 't1'})], WINDOWS, DEFAULT_LUNCH_BREAK))
+            .toEqual(expect.arrayContaining([expect.stringMatching(/plusieurs séances/)]));
+    });
 });
 
 describe('checkSchedule, créneaux déjà en place', () => {

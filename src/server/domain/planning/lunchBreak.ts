@@ -82,7 +82,9 @@ export function isSplitAroundLunch(first: ScheduleSlot, second: ScheduleSlot, lu
 export function groupSessions<T extends ScheduleSlot>(slots: readonly T[]): T[][] {
     const groups = new Map<string, T[]>();
     for (const slot of slots) {
-        const key = `${slot.activity}\u0000${slot.day}`;
+        const key = slot.ref !== undefined
+            ? `ref\u0000${slot.ref}\u0000${slot.day}`
+            : `name\u0000${slot.activity}\u0000${slot.day}`;
         groups.set(key, [...(groups.get(key) ?? []), slot]);
     }
     return [...groups.values()];
