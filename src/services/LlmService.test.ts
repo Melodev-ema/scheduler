@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {generateWeeklyPlanning, LlmTruncatedError} from './LlmService';
+import {generateWeeklyPlanning, LlmTruncatedError, REASONING_EFFORT, SCHEDULE_SCHEMA} from './LlmService';
 
 vi.mock('@/server/config/env', () => ({
     getEnv: () => ({llmApiKey: 'clé-de-test', llmBaseUrl: 'https://llm.test/v1', llmModel: 'modele-de-test'}),
@@ -50,6 +50,31 @@ describe('generateWeeklyPlanning', () => {
         expect(body.messages[1].content).toBe('{"jours":[]}');
         expect(body).toHaveProperty('max_tokens');
         expect(body).not.toHaveProperty('max_completion_tokens');
+    });
+
+    it('impose le schéma de sortie en mode strict et règle le raisonnement', async () => {
+        fetchMock.mockResolvedValue(completion('{"schedule":[]}'));
+
+        await generateWeeklyPlanning('{}');
+
+        const {body} = sentBody();
+        expect(body.response_format).toEqual({
+            type: 'json_schema', json_schema: {name: 'planning', strict: true, schema: SCHEDULE_SCHEMA},
+        });
+        expect(body.reasoning_effort).toBe(REASONING_EFFORT);
+        expect(body.include_reasoning).toBe(false);
+    });
+
+    it('déclare chaque champ requis et rien d\'autre, comme le mode strict l\'exige', () => {
+        const objects = [
+            SCHEDULE_SCHEMA,
+            SCHEDULE_SCHEMA.properties.schedule.items,
+            SCHEDULE_SCHEMA.properties.sacrifices.items,
+        ];
+        for (const object of objects) {
+            expect(object.additionalProperties).toBe(false);
+            expect([...object.required].sort()).toEqual(Object.keys(object.properties).sort());
+        }
     });
 
     it('ajoute la réponse précédente et la demande de correction', async () => {

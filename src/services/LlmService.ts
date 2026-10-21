@@ -1,5 +1,50 @@
 import {getEnv} from "@/server/config/env";
 import {isRetryableStatus, retryDelayMs} from "@/services/llmRetry";
+import {WEEKDAYS} from "@/server/domain/planning/days";
+import {TIME_PATTERN} from "@/server/domain/planning/time";
+
+export const REASONING_EFFORT = "medium";
+
+const TIME = {type: "string", pattern: TIME_PATTERN.source};
+
+export const SCHEDULE_SCHEMA = {
+    type: "object",
+    properties: {
+        schedule: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    day: {type: "string", enum: [...WEEKDAYS]},
+                    start_time: TIME,
+                    end_time: TIME,
+                    activity: {type: "string"},
+                    description: {type: "string"},
+                    ref: {type: ["string", "null"]},
+                },
+                required: ["day", "start_time", "end_time", "activity", "description", "ref"],
+                additionalProperties: false,
+            },
+        },
+        sacrifices: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    activity: {type: "string"},
+                    day: {type: "string"},
+                    type: {type: "string", enum: ["supprimée", "raccourcie"]},
+                    detail: {type: "string"},
+                },
+                required: ["activity", "day", "type", "detail"],
+                additionalProperties: false,
+            },
+        },
+        note: {type: "string"},
+    },
+    required: ["schedule", "sacrifices", "note"],
+    additionalProperties: false,
+};
 
 /** Le SDK openai posait dix minutes ; on garde la même borne. */
 const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
@@ -114,7 +159,7 @@ Ne supprime et ne raccourcis jamais une séance de priorité 1.
 ## Sortie
 {
   "schedule": [
-    {"day": "lundi", "start_time": "09:00", "end_time": "10:00", "activity": "Sport", "description": "Séance de cardio"}
+    {"day": "lundi", "start_time": "09:00", "end_time": "10:00", "activity": "Sport", "description": "Séance de cardio", "ref": null}
   ],
   "sacrifices": [
     {"activity": "Lecture", "day": "mercredi", "type": "supprimée", "detail": "plus de place après le travail"},
@@ -123,7 +168,7 @@ Ne supprime et ne raccourcis jamais une séance de priorité 1.
   "note": "Sport du lundi au jeudi pour garder le vendredi matin libre ; l'apprentissage le matin, quand on est le plus frais."
 }
 - "activity" reprend exactement le "name" de l'activité.
-- Quand l'activité a un "ref", chaque créneau qui la concerne porte "ref" avec exactement la même valeur ; sinon, pas de "ref".
+- Quand l'activité a un "ref", chaque créneau qui la concerne porte "ref" avec exactement la même valeur ; sinon, "ref" vaut null.
 - "sacrifices" liste chaque séance supprimée ou raccourcie ; tableau vide si rien n'a été sacrifié.
 - "note" explique en deux ou trois phrases, en tutoyant, les choix principaux de la semaine : pourquoi ces jours, ces horaires, ce qui a dû céder. Quand "occupe" est présente, elle parle du reste de la semaine.
 `;
@@ -155,7 +200,9 @@ export async function generateWeeklyPlanning(
                 ]
                 : []),
         ],
-        response_format: {type: "json_object"},
+        response_format: {type: "json_schema", json_schema: {name: "planning", strict: true, schema: SCHEDULE_SCHEMA}},
+        reasoning_effort: REASONING_EFFORT,
+        include_reasoning: false,
         temperature: TEMPERATURE,
         max_tokens: MAX_TOKENS,
         top_p: 1,
