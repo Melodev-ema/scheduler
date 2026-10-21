@@ -11,7 +11,7 @@ la semaine.
    chaque jour, envoie les activités et ces plages au modèle, valide sa réponse puis enregistre le planning.
 3. **Suivre sa semaine** : un clic sur un créneau le marque comme fait, un second le remet à faire. La
    colonne *Déjà passé (min)* de la page *Activités* additionne les créneaux faits du planning le plus
-   récent. Elle n'est pas enregistrée mais recalculée à chaque lecture, en rapprochant créneaux et activités
+   récent de la semaine en cours. Elle n'est pas enregistrée mais recalculée à chaque lecture, en rapprochant créneaux et activités
    par leur nom. Elle repart donc de 0 à chaque nouvelle génération.
 
 Les règles imposées au modèle :
@@ -22,8 +22,11 @@ Les règles imposées au modèle :
   ne tient pas ;
 - une journée va de 09:00 à 18:00 par défaut. Un bloc fixe qui déborde l'élargit, rien ne la réduit.
 
-Chaque génération crée un nouveau planning, et l'accueil affiche le plus récent. Les précédents restent en
-base comme instantanés : modifier une activité ne réécrit pas les plannings passés.
+Chaque génération crée un nouveau planning, et l'accueil affiche le plus récent de la semaine affichée. Les
+précédents restent en base comme instantanés : modifier une activité ne réécrit pas les plannings passés.
+
+Quand il ne reste plus rien à planifier cette semaine, l'application propose de préparer la suivante. Les
+flèches ‹ › de l'accueil passent d'une semaine planifiée à l'autre ; seule la semaine en cours se coche.
 
 ## Stack
 
@@ -135,14 +138,16 @@ Toutes les routes sont sous `/api` et échangent du JSON.
 | `DELETE` | `/api/activity`                 | Supprime l'activité dont l'identifiant est passé dans `index` |
 | `GET`    | `/api/activity/[id]`            | Une activité                                                  |
 | `POST`   | `/api/activity/[id]`            | Met à jour une activité                                       |
-| `GET`    | `/api/generate_weekly_planning` | Le planning le plus récent                                    |
-| `POST`   | `/api/generate_weekly_planning` | Génère un nouveau planning                                    |
+| `GET`    | `/api/generate_weekly_planning` | Le planning le plus récent d'une semaine (`?week=AAAA-MM-JJ`, un lundi ; par défaut la semaine en cours) |
+| `POST`   | `/api/generate_weekly_planning` | Génère un planning (`{week: "current" \| "next"}`, par défaut `current`) |
+| `GET`    | `/api/planning/weeks`           | Les lundis des semaines qui ont un planning                   |
 | `POST`   | `/api/schedule/status`          | Passe un créneau à `pending` ou à `done`                      |
 
 Les erreurs répondent toutes `{error}` :
 
 - **400** — entrée invalide. La réponse liste aussi les champs fautifs.
 - **404** — document introuvable.
+- **409** — rien à planifier (la réponse porte alors `nextWeek` et `nextWeekPrepared`), ou créneau d'une semaine qui ne se coche ou ne se verrouille plus.
 - **429** — plus de 5 générations en 15 minutes. L'en-tête `Retry-After` indique quand réessayer.
 - **502** — le modèle a renvoyé une réponse inexploitable deux fois de suite.
 - **500** — toute autre erreur. Le détail est journalisé côté serveur, jamais renvoyé au client.
