@@ -129,7 +129,8 @@ serveur de développement répond ensuite 500 sur toutes les routes jusqu'à son
 
 ## API
 
-Toutes les routes sont sous `/api` et échangent du JSON.
+Toutes les routes sont sous `/api` et échangent du JSON. Un corps doit être envoyé en
+`Content-Type: application/json` : sinon, il est ignoré.
 
 | Méthode  | Route                           | Rôle                                                          |
 |----------|---------------------------------|---------------------------------------------------------------|
@@ -146,8 +147,11 @@ Toutes les routes sont sous `/api` et échangent du JSON.
 Les erreurs répondent toutes `{error}` :
 
 - **400** — entrée invalide. La réponse liste aussi les champs fautifs.
+- **403** — hôte inconnu (autre que `localhost`, `127.0.0.1` ou `[::1]`), ou écriture envoyée depuis une autre
+  origine que l'application.
 - **404** — document introuvable.
 - **409** — rien à planifier (la réponse porte alors `nextWeek` et `nextWeekPrepared`), ou créneau d'une semaine qui ne se coche ou ne se verrouille plus.
+- **413** — corps de requête annoncé au-delà de 1 Mo.
 - **429** — plus de 5 générations en 15 minutes. L'en-tête `Retry-After` indique quand réessayer.
 - **502** — le modèle a renvoyé une réponse inexploitable deux fois de suite.
 - **500** — toute autre erreur. Le détail est journalisé côté serveur, jamais renvoyé au client.
@@ -204,8 +208,9 @@ sert de test de bout en bout à `parseSchedule` et de référence pour le format
 
 ## Limites connues
 
-- **Aucune authentification.** Toutes les routes sont ouvertes, et la taille des corps de requête n'est pas
-  bornée. L'application ne doit pas être exposée sur un réseau public en l'état.
+- **Aucune authentification.** Toutes les routes sont ouvertes à quiconque joint l'application. Un site tiers
+  ouvert dans le navigateur ne peut ni y écrire ni la lire, mais l'application ne doit pas être exposée sur un
+  réseau public en l'état.
 - **L'unité de `timeToSpend` est incohérente.** Les activités l'enregistrent en minutes, mais le prompt
   annonce des heures au modèle : 90 minutes lui arrivent comme 90 heures. La corriger demande de migrer les
   données existantes et la durée par défaut des tâches externes en même temps.

@@ -1,15 +1,21 @@
 import {NextResponse} from 'next/server';
 import type {NextRequest} from 'next/server';
+import {guardRequest} from '@/server/http/requestGuard';
 
 /**
  * Point de passage par requête. Next 16 a renommé `middleware.ts` en
  * `proxy.ts` : même mécanique, autre nom de fichier et d'export.
- *
- * Il ne fait qu'une chose aujourd'hui : tirer un nonce et poser la CSP. C'est
- * aussi ici que viendra le guard d'authentification, quand la phase qui le
- * porte sera écrite — il faudra alors élargir le `matcher` à `/api`.
  */
 export function proxy(request: NextRequest) {
+    const refusal = guardRequest(request);
+    if (refusal) {
+        return refusal;
+    }
+
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+        return NextResponse.next();
+    }
+
     const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
 
     // React utilise `eval` en développement pour reconstruire les piles
@@ -63,5 +69,6 @@ export const config = {
                 {type: 'header', key: 'purpose', value: 'prefetch'},
             ],
         },
+        '/api/:path*',
     ],
 };

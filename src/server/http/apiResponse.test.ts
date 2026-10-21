@@ -75,27 +75,54 @@ describe('serverError', () => {
 });
 
 describe('readJsonBody', () => {
-    it('rend l\'objet quand le corps est du JSON valide', async () => {
-        const request = new Request('http://localhost/api/activity', {
+    function jsonRequest(body?: BodyInit, contentType = 'application/json') {
+        return new Request('http://localhost/api/activity', {
             method: 'POST',
-            body: JSON.stringify({name: 'Sport'}),
-        });
+            headers: {'content-type': contentType},
+            body,
+            ...(body instanceof ReadableStream ? {duplex: 'half'} : {}),
+        } as RequestInit);
+    }
+
+    it('rend l\'objet quand le corps est du JSON valide', async () => {
+        await expect(readJsonBody(jsonRequest(JSON.stringify({name: 'Sport'})))).resolves.toEqual({name: 'Sport'});
+    });
+
+    it('accepte un charset dans le Content-Type', async () => {
+        const request = jsonRequest('{"name":"Sport"}', 'application/json; charset=utf-8');
 
         await expect(readJsonBody(request)).resolves.toEqual({name: 'Sport'});
     });
 
     it('rend undefined sur un corps vide, pour que Zod produise un 400 et non un 500', async () => {
-        const request = new Request('http://localhost/api/activity', {method: 'POST'});
-
-        await expect(readJsonBody(request)).resolves.toBeUndefined();
+        await expect(readJsonBody(jsonRequest())).resolves.toBeUndefined();
     });
 
     it('rend undefined sur un corps mal formé', async () => {
-        const request = new Request('http://localhost/api/activity', {
-            method: 'POST',
-            body: '{ceci n\'est pas du json',
+        await expect(readJsonBody(jsonRequest('{ceci n\'est pas du json'))).resolves.toBeUndefined();
+    });
+
+    it('ignore un corps text/plain, celui qu\'un autre site peut poster sans preflight', async () => {
+        const request = new Request('http://localhost/api/activity', {method: 'POST', body: '{"name":"Intrus"}'});
+
+        expect(request.headers.get('content-type')).toMatch(/^text\/plain/);
+        await expect(readJsonBody(request)).resolves.toBeUndefined();
+    });
+
+    it('rend undefined au-delà de la limite', async () => {
+        await expect(readJsonBody(jsonRequest('{"name":"Sport"}'), 10)).resolves.toBeUndefined();
+    });
+
+    it('cesse de lire un flux sans longueur annoncée dès la limite franchie', async () => {
+        let pulled = 0;
+        const stream = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                pulled++;
+                controller.enqueue(new TextEncoder().encode('x'.repeat(64)));
+            },
         });
 
-        await expect(readJsonBody(request)).resolves.toBeUndefined();
+        await expect(readJsonBody(jsonRequest(stream), 100)).resolves.toBeUndefined();
+        expect(pulled).toBeLessThan(5);
     });
 });
