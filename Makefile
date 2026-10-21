@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help down dev test lint build prod stop logs
+.PHONY: help down dev test lint check build prod stop logs
 
 help: ## Liste les cibles
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-8s\033[0m %s\n", $$1, $$2}'
@@ -15,6 +15,14 @@ test: ## Tests du domaine (vitest)
 
 lint: ## ESLint
 	npm run lint
+
+check: ## Lint, tests et build ; échoue si une page n'est plus dynamique (CSP)
+	npm run lint
+	npm test
+	@log=$$(mktemp); npm run build > $$log 2>&1; status=$$?; cat $$log; \
+	if [ $$status -ne 0 ]; then rm -f $$log; exit $$status; fi; \
+	static=$$(grep -E '○ /' $$log | grep -v '/icon.svg'); rm -f $$log; \
+	if [ -n "$$static" ]; then echo "Pages devenues statiques, sans nonce pour la CSP :"; echo "$$static"; exit 1; fi
 
 build: ## Construit l'image de production
 	docker compose --profile app build

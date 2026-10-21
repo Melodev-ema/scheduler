@@ -68,6 +68,8 @@ l'API commence par s'y connecter.
 Un `Makefile` regroupe les commandes ; `make` seul les liste.
 
 - **Développement** : `make dev` lance `npm run dev` sur la machine, avec le MongoDB local habituel (27017).
+- **Vérification** : `make check` enchaîne le lint, les tests et le build, et échoue si une page n'est plus
+  rendue à la demande (la CSP a besoin d'un nonce par requête).
 - **Production** : `make prod` construit l'image (`Dockerfile`, sortie *standalone* de Next) et lance
   l'application et son propre MongoDB sur <http://localhost:3000>. `make logs` suit ses logs, `make stop`
   l'arrête, `make down` arrête tous les conteneurs sans perdre les données.
