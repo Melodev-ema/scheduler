@@ -14,9 +14,33 @@ export class LlmRequestError extends Error {
     }
 }
 
-/** Forme minimale d'une réponse chat-completions : rien d'autre n'est lu. */
+export class LlmTruncatedError extends Error {
+    constructor(readonly maxTokens: number) {
+        super(`Réponse tronquée à ${maxTokens} tokens`);
+        this.name = 'LlmTruncatedError';
+    }
+}
+
+interface ChatUsage {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    completion_tokens_details?: {reasoning_tokens?: number};
+}
+
 interface ChatCompletion {
-    choices?: Array<{message?: {content?: string | null}}>;
+    choices?: Array<{message?: {content?: string | null}; finish_reason?: string}>;
+    usage?: ChatUsage;
+}
+
+function describeUsage(finishReason: string | undefined, usage: ChatUsage | undefined, elapsedMs: number): string {
+    const reasoning = usage?.completion_tokens_details?.reasoning_tokens;
+    return [
+        `fin ${finishReason ?? '?'}`,
+        `entrée ${usage?.prompt_tokens ?? '?'}`,
+        `sortie ${usage?.completion_tokens ?? '?'}`,
+        ...(reasoning !== undefined ? [`raisonnement ${reasoning}`] : []),
+        `${(elapsedMs / 1000).toFixed(1)} s`,
+    ].join(', ');
 }
 
 /** Attente de reprise, interrompue par l'échéance de la génération. */
@@ -139,6 +163,7 @@ export async function generateWeeklyPlanning(
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         const isLastAttempt = attempt === MAX_ATTEMPTS;
+        const startedAt = Date.now();
         let response: Response;
 
         try {
@@ -165,7 +190,12 @@ export async function generateWeeklyPlanning(
 
         if (response.ok) {
             const completion = await response.json() as ChatCompletion;
-            return completion.choices?.[0]?.message?.content ?? null;
+            const choice = completion.choices?.[0];
+            console.info(`Modèle : ${describeUsage(choice?.finish_reason, completion.usage, Date.now() - startedAt)}`);
+            if (choice?.finish_reason === 'length') {
+                throw new LlmTruncatedError(MAX_TOKENS);
+            }
+            return choice?.message?.content ?? null;
         }
 
         const errorBody = await response.text();
