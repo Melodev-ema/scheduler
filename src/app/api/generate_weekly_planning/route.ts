@@ -6,9 +6,8 @@ import dbConnect from '@/server/infrastructure/db/connection';
 import Planning, {PlanningInterface} from '@/models/Planning';
 import {ScheduleInterface} from '@/models/Schedule';
 import {generateWeeklyPlanning, LlmRequestError} from '@/services/LlmService';
-import {ActivityInput, activityToPlannable} from '@/server/domain/planning/mergeTasks';
-import {TaskInput, taskToPlannable} from '@/server/domain/planning/tasks';
-import {buildDayWindows} from '@/server/domain/planning/buildDayWindows';
+import {ActivityInput} from '@/server/domain/planning/mergeTasks';
+import {TaskInput} from '@/server/domain/planning/tasks';
 import {
     InvalidModelResponseError,
     parseNote,
@@ -17,18 +16,13 @@ import {
     Sacrifice,
     ScheduleSlot,
 } from '@/server/domain/planning/parseSchedule';
-import {toSessionRequests} from '@/server/domain/planning/sessions';
 import {checkSchedule} from '@/server/domain/planning/checkSchedule';
 import {buildCorrectionRequest, isBetterCorrection} from '@/server/domain/planning/correction';
 import Settings, {SettingsInterface} from '@/models/Settings';
-import {
-    DEFAULT_LUNCH_BREAK, lunchBreakOf, numberParts, validateLunchBreak,
-} from '@/server/domain/planning/lunchBreak';
-import {isWeekday, weekdayFromDate} from '@/server/domain/planning/days';
-import {
-    busySlotsOf, compareSlots, excludePlacedTasks, excludeTasksIn, excludeUpcomingTasks, frozenSlots, withoutResentTasks,
-    remainingRequests, remainingWindows, weekStartOf,
-} from '@/server/domain/planning/partial';
+import {DEFAULT_LUNCH_BREAK, lunchBreakOf, validateLunchBreak} from '@/server/domain/planning/lunchBreak';
+import {isWeekday} from '@/server/domain/planning/days';
+import {weekStartOf} from '@/server/domain/planning/partial';
+import {assembleSchedule, planTarget, prepareGeneration} from '@/server/domain/planning/generation';
 import {nextWeekStart, weekKeyOf} from '@/server/domain/planning/week';
 import {createRateLimiter} from '@/server/http/rateLimit';
 import {fail, invalidInput, readJsonBody, serverError} from '@/server/http/apiResponse';
@@ -56,24 +50,6 @@ const GENERATION_WINDOW_MS = 15 * 60 * 1000;
 
 // Instancié au chargement du module : l'état vit aussi longtemps que le processus.
 const generationLimiter = createRateLimiter(GENERATION_LIMIT, GENERATION_WINDOW_MS);
-
-/**
- * La semaine à générer. La semaine suivante se génère comme si on était son
- * lundi 00:00 : `planNow` remplace alors l'heure réelle pour tout ce qui
- * découpe la semaine (jours passés, échéances, créneaux figés). Le dimanche
- * reste dans sa semaine : même découpage que l'UI.
- */
-function planTarget(week: 'current' | 'next', now: Date): {planNow: Date; weekStart: Date} {
-    if (week === 'next') {
-        const weekStart = nextWeekStart(now);
-        return {planNow: weekStart, weekStart};
-    }
-    return {planNow: now, weekStart: weekStartOf(now)};
-}
-
-function minutesOf(date: Date): number {
-    return date.getHours() * 60 + date.getMinutes();
-}
 
 export async function GET(request: NextRequest) {
     try {
@@ -106,7 +82,7 @@ export async function POST(request: NextRequest) {
         }
         const {week} = parsed.data;
         const now = new Date();
-        const {planNow, weekStart} = planTarget(week, now);
+        const {weekStart} = planTarget(week, now);
 
         const [activities, allTasks, settings, latest, currentWeek, preparedWeek] = await Promise.all([
             Activity.find({}).lean<ActivityInput[]>(),
@@ -128,73 +104,33 @@ export async function POST(request: NextRequest) {
             lunch = DEFAULT_LUNCH_BREAK;
         }
 
-        // Dans la semaine générée, on garde ce qui est fait, verrouillé ou commencé ;
-        // le modèle ne replanifie que le reste. Sans planning pour elle, rien n'est figé.
-        // Pour la semaine suivante, à son lundi 00:00, seuls les verrouillés comptent.
-        const today = weekdayFromDate(planNow);
-        const nowMinutes = minutesOf(planNow);
         const previous: ScheduleInterface[] = latest?.schedule ?? [];
         const unknownDays = previous.filter((slot) => !isWeekday(slot.day)).length;
         if (unknownDays > 0) {
             console.warn(`Génération : ${unknownDays} créneau(x) au jour inconnu ignoré(s)`);
         }
-        const candidates = frozenSlots(previous, today, nowMinutes);
-        let tasks = excludePlacedTasks(allTasks, candidates, today, nowMinutes);
-        // Une tâche qui a encore un créneau à venir cette semaine n'est pas envoyée une seconde fois.
-        // Jugé à l'heure réelle : c'est la semaine en cours.
-        if (currentWeek) {
-            tasks = excludeUpcomingTasks(tasks, currentWeek.schedule, weekdayFromDate(now), minutesOf(now));
-        }
-        if (preparedWeek) {
-            tasks = excludeTasksIn(tasks, preparedWeek.schedule);
-        }
-        // Une tâche manquée revient : son ancien créneau ne doit pas rester à côté du nouveau.
-        const frozen = withoutResentTasks(candidates, tasks);
-        // Partielle seulement si quelque chose est gardé : c'est ce que le toast annonce.
-        const partial = frozen.length > 0;
 
-        // Le modèle ne voit que ces références courtes ; on retrouve la tâche
-        // de chaque créneau par elles, jamais par un titre qu'il aurait reformulé.
-        const refs = tasks.map((_, index) => `t${index + 1}`);
-        const taskIdByRef = new Map(tasks.map((task, index) => [refs[index], task._id]));
-        const plannable = [
-            ...activities.map(activityToPlannable),
-            ...tasks.map((task, index) => taskToPlannable(task, planNow, refs[index])),
-        ];
-
-        // La demande se calcule sur la semaine entière — c'est elle que garde le
-        // Planning, pour qu'isWeekStale compare toujours les mêmes activités —
-        // puis se réduit à ce qu'il reste à placer.
-        const weekWindows = buildDayWindows(plannable);
-        const weekRequests = toSessionRequests(plannable, weekWindows);
-        if (weekWindows.length === 0) {
+        const generation = prepareGeneration({
+            week,
+            now,
+            activities,
+            tasks: allTasks,
+            previous,
+            currentWeek: currentWeek?.schedule ?? null,
+            preparedWeek: preparedWeek?.schedule ?? null,
+            lunch,
+        });
+        if (generation.kind === 'nothing-to-plan') {
             return fail(409, 'Aucune activité ni tâche à planifier');
         }
-        const dayWindows = remainingWindows(weekWindows, today, nowMinutes);
-        // Ne peut venir que de la semaine en cours : la suivante, prise à son lundi 00:00, a tous ses jours.
-        // Le client lit `nextWeek` (pas le message) pour proposer de préparer la semaine suivante.
-        if (dayWindows.length === 0) {
-            const nextWeek = nextWeekStart(now);
-            const prepared = await latestPlanningOf(nextWeek).select('_id').lean();
+        if (generation.kind === 'week-over') {
+            const prepared = await latestPlanningOf(generation.nextWeek).select('_id').lean();
             return fail(409, 'Il ne reste rien à planifier cette semaine', undefined, {
-                nextWeek: weekKeyOf(nextWeek),
+                nextWeek: weekKeyOf(generation.nextWeek),
                 nextWeekPrepared: prepared !== null,
             });
         }
-        const remainingDays = dayWindows.map((window) => window.jour);
-        const requests = remainingRequests(weekRequests, frozen, dayWindows);
-        const busy = busySlotsOf(frozen, remainingDays);
-
-        const payload = JSON.stringify({
-            jours: dayWindows,
-            // Sans pause, la clé est absente : le prompt ne coupe alors aucune séance.
-            ...(lunch ? {pause: {debut: lunch.start, fin: lunch.end}} : {}),
-            // Absente quand rien n'est figé : une génération complète garde le prompt d'avant.
-            ...(busy.length > 0
-                ? {occupe: busy.map((slot) => ({jour: slot.day, debut: slot.startTime, fin: slot.endTime, activite: slot.activity}))}
-                : {}),
-            activites: requests,
-        });
+        const {weekWindows, weekRequests, dayWindows, requests, busy, frozen, partial, taskIdByRef, payload} = generation;
 
         const weekEndDate = new Date(weekStart);
         weekEndDate.setDate(weekEndDate.getDate() + 6);
@@ -206,33 +142,7 @@ export async function POST(request: NextRequest) {
             const current = latest !== null && frozen.length > 0
                 ? await Planning.findById(latest._id).lean<PlanningInterface>()
                 : null;
-            const stateById = new Map((current?.schedule ?? []).map((slot) => [String(slot._id), slot]));
-
-            // Copie d'un créneau figé : tout sauf l'_id, que Mongoose redonne.
-            const kept = frozen.map((slot) => {
-                const state = stateById.get(String(slot._id)) ?? slot;
-                return {
-                    day: slot.day,
-                    startTime: slot.startTime,
-                    endTime: slot.endTime,
-                    activity: slot.activity,
-                    description: slot.description,
-                    priority: slot.priority,
-                    status: state.status,
-                    locked: state.locked ?? false,
-                    part: slot.part ?? 1,
-                    parts: slot.parts ?? 1,
-                    ...(slot.taskId ? {taskId: slot.taskId} : {}),
-                };
-            });
-
-            // Les deux moitiés d'une séance coupée par la pause portent 1/2 et 2/2.
-            const fresh = numberParts(replanned, lunch).map((slot) => {
-                // Une référence inconnue est déjà signalée par checkSchedule : le créneau reste, sans lien.
-                const taskId = slot.ref ? taskIdByRef.get(slot.ref) : undefined;
-                return taskId ? {...slot, taskId} : slot;
-            });
-            const schedule = [...kept, ...fresh].sort(compareSlots);
+            const schedule = assembleSchedule({frozen, current: current?.schedule ?? [], replanned, lunch, taskIdByRef});
 
             await new Planning({
                 name: `Planning du ${dates}`,
