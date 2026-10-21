@@ -60,6 +60,25 @@ describe('taskToPlannable', () => {
         expect(task.days).toEqual(['mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']);
     });
 
+    it('borne une échéance au dimanche du passage à l\'heure d\'hiver', () => {
+        const saturday = new Date(2026, 9, 24, 15, 0);
+        expect(taskToPlannable({title: 'Impôts', dueDate: '2026-10-25'}, saturday, 't1').days)
+            .toEqual(['samedi', 'dimanche']);
+    });
+
+    it('ouvre toute la fin de semaine à une échéance juste après le passage à l\'heure d\'hiver', () => {
+        const saturday = new Date(2026, 9, 24, 15, 0);
+        expect(taskToPlannable({title: 'Impôts', dueDate: '2026-10-26'}, saturday, 't1').days)
+            .toEqual(['samedi', 'dimanche']);
+    });
+
+    it('compte un jour d\'échéance sur une journée de 23 h, au passage à l\'heure d\'été', () => {
+        const saturday = new Date(2027, 2, 27, 15, 0);
+        const task = taskToPlannable({title: 'Impôts', priority: 3, dueDate: '2027-03-28'}, saturday, 't1');
+        expect(task.days).toEqual(['samedi', 'dimanche']);
+        expect(task.priority).toBe(3);
+    });
+
     it('garde le créneau d\'une tâche fixe', () => {
         const task = taskToPlannable({title: 'Dentiste', startTime: '10:00', endTime: '10:45'}, NOW, 't2');
         expect(task).toMatchObject({startTime: '10:00', endTime: '10:45', ref: 't2'});
