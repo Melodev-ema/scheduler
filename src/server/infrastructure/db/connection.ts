@@ -17,12 +17,19 @@ global.mongoose = global.mongoose || {conn: null, promise: null};
 
 const cached: CachedMongoose = global.mongoose;
 
+const SERVER_SELECTION_TIMEOUT_MS = 5_000;
+
 async function connect(): Promise<Mongoose> {
     if (!cached.promise) {
-        cached.promise = mongoose.connect(getEnv().mongodbUri);
+        cached.promise = mongoose.connect(getEnv().mongodbUri, {serverSelectionTimeoutMS: SERVER_SELECTION_TIMEOUT_MS});
     }
 
-    cached.conn = await cached.promise;
+    try {
+        cached.conn = await cached.promise;
+    } catch (error) {
+        cached.promise = null;
+        throw error;
+    }
     return cached.conn;
 }
 
