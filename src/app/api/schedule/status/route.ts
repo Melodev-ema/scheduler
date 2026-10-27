@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
         const {status, id, planningId} = parsed.data;
 
         // Seule la semaine en cours se coche : les autres sont passées ou pas commencées.
-        const target = await Planning.findById(planningId).select('weekStart timestamp').lean();
+        const target = await Planning.findOne({_id: planningId, 'schedule._id': id})
+            .select({weekStart: 1, timestamp: 1, 'schedule.$': 1})
+            .lean<{weekStart?: Date; timestamp: Date; schedule: Array<{taskId?: unknown}>}>();
         if (!target) {
             return fail(404, 'Créneau introuvable');
         }
@@ -30,8 +32,25 @@ export async function POST(request: NextRequest) {
             return fail(409, 'Seule la semaine en cours se coche');
         }
 
-        // Mise à jour atomique du sous-document : il n'existe plus de collection
-        // `schedules`, la copie embarquée dans Planning est la seule source.
+        // Une tâche ponctuelle suit son créneau : cochée, elle ne revient plus à
+        // la génération suivante ; décochée, elle y revient.
+        const taskId = target.schedule[0]?.taskId;
+        if (taskId) {
+            await Task.findByIdAndUpdate(taskId, {done: status === 'done'});
+
+            // Cochée, la tâche quitte aussi la semaine préparée (ses deux moitiés) ;
+            // décochée, la semaine préparée n'est pas touchée.
+            if (status === 'done') {
+                const prepared = await latestPlanningOf(nextWeekStart(now)).select('_id').lean();
+                if (prepared) {
+                    await Planning.updateOne(
+                        {_id: prepared._id},
+                        {$pull: {schedule: {taskId: new Types.ObjectId(String(taskId))}}},
+                    );
+                }
+            }
+        }
+
         const planning = await Planning.findOneAndUpdate(
             {_id: planningId, 'schedule._id': id},
             {$set: {'schedule.$.status': status}},
@@ -44,24 +63,6 @@ export async function POST(request: NextRequest) {
 
         // `.id()` est l'accesseur de sous-document des DocumentArray Mongoose.
         const schedule = planning.schedule.id(id);
-
-        // Une tâche ponctuelle suit son créneau : cochée, elle ne revient plus à
-        // la génération suivante ; décochée, elle y revient.
-        if (schedule?.taskId) {
-            await Task.findByIdAndUpdate(schedule.taskId, {done: status === 'done'});
-
-            // Cochée, la tâche quitte aussi la semaine préparée (ses deux moitiés) ;
-            // décochée, la semaine préparée n'est pas touchée.
-            if (status === 'done') {
-                const prepared = await latestPlanningOf(nextWeekStart(now)).select('_id').lean();
-                if (prepared) {
-                    await Planning.updateOne(
-                        {_id: prepared._id},
-                        {$pull: {schedule: {taskId: new Types.ObjectId(String(schedule.taskId))}}},
-                    );
-                }
-            }
-        }
 
         return Response.json({status, schedule});
     } catch (error) {
