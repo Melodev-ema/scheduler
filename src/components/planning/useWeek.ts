@@ -7,6 +7,7 @@ import {ActivityInterface} from "@/models/Activity";
 import {apiService, HttpError} from "@/services/ApiService";
 import {parseWeekKey, weekKeyOf} from "@/server/domain/planning/week";
 import {formatShortDate} from "@/components/uiComponents/format";
+import {WeekData, weekDataOf} from "@/components/planning/weekData";
 
 /**
  * Il n'y a pas de store : chaque composant garde son état local. Ce signal de
@@ -51,21 +52,13 @@ export function isWeekStale(planning: PlanningInterface | null, activities: Acti
     return [...current].some((name) => !planned.has(name));
 }
 
-interface WeekData {
-    planning: PlanningInterface | null;
-    activities: ActivityInterface[];
-    weeks: string[];
-    loaded: boolean;
-    /** La semaine demandée pour ces données : une autre semaine n'est pas encore chargée. */
-    week?: string;
-}
 
 /**
  * Planning de la semaine `week` (clé `YYYY-MM-DD` d'un lundi ; absente = la semaine
  * en cours), activités et semaines planifiées, rechargés à chaque `notifySchedulerChanged()`.
  */
 export function useWeek(week?: string) {
-    const [data, setData] = useState<WeekData>({planning: null, activities: [], weeks: [], loaded: false});
+    const [data, setData] = useState<WeekData>({planning: null, activities: [], weeks: [], loaded: false, failed: false});
     const [version, setVersion] = useState(0);
     const [generating, setGenerating] = useState(generationRunning);
 
@@ -78,15 +71,9 @@ export function useWeek(week?: string) {
             ),
             apiService.get<{ data: ActivityInterface[] }>("/api/activity"),
             apiService.get<{ weeks: string[] }>("/api/planning/weeks"),
-        ]).then(([planning, activities, weeks]) => {
+        ]).then((results) => {
             if (!alive) return;
-            setData({
-                planning: planning.status === "fulfilled" ? planning.value : null,
-                activities: activities.status === "fulfilled" ? activities.value.data : [],
-                weeks: weeks.status === "fulfilled" ? weeks.value.weeks : [],
-                loaded: true,
-                week,
-            });
+            setData(weekDataOf(results, week));
         });
         return () => {
             alive = false;
@@ -114,7 +101,8 @@ export function useWeek(week?: string) {
         // Les semaines planifiées, elles, restent valables pendant le chargement.
         loaded: data.loaded && data.week === week,
         // Les activités se comparent à la semaine en cours seulement : une autre semaine est figée.
-        stale: (!week || week === weekKeyOf(new Date()))
+        stale: !data.failed
+            && (!week || week === weekKeyOf(new Date()))
             && isWeekStale(data.planning, data.activities),
         generating,
         reload: () => setVersion((v) => v + 1),

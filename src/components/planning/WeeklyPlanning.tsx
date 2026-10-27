@@ -20,6 +20,7 @@ import GenerateButton from "@/components/planning/GenerateButton";
 import {useWeek} from "@/components/planning/useWeek";
 import {neighbours, weekKindOf} from "@/components/planning/weekNav";
 import Spinner from "@/components/uiComponents/Spinner";
+import {BaseButton} from "@/components/uiComponents/BaseButton";
 import PriorityIcon from "@/components/uiComponents/icons/PriorityIcon";
 import {AlertIcon, CloseIcon} from "@/components/uiComponents/icons/icons";
 import {PRIORITIES, priorityStyle} from "@/components/uiComponents/priority";
@@ -132,7 +133,7 @@ function startMinutes(slot: ScheduleInterface): number {
 export default function WeeklyPlanning() {
     /** La semaine affichée ; `null` = la semaine en cours. */
     const [shownWeek, setShownWeek] = useState<string | null>(null);
-    const {planning, loaded, stale, setPlanning, reload, generating, weeks} = useWeek(shownWeek ?? undefined);
+    const {planning, loaded, failed, stale, setPlanning, reload, generating, weeks} = useWeek(shownWeek ?? undefined);
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
     const [noteOpen, setNoteOpen] = useState(false);
     const [hidden, setHidden] = useState<Partial<Record<Dismissable, string[]>>>({});
@@ -419,6 +420,21 @@ export default function WeeklyPlanning() {
                 </details>
             }
         </div>;
+
+    if (failed) {
+        return (
+            <div className="flex flex-col gap-6 pt-1 xl:pt-4">
+                {title}
+                <div role="alert" className="flex flex-col items-start gap-3 rounded-[28px] border border-line p-6 xl:p-8">
+                    <div className="ital text-[26px] leading-[30px]">Ta semaine n’a pas pu être chargée.</div>
+                    <p className="max-w-prose text-sm text-muted">
+                        Le serveur ne répond pas pour l’instant. Rien n’est perdu : réessaie dans un moment.
+                    </p>
+                    <BaseButton theme="secondary" size="small" onClick={reload}>Réessayer</BaseButton>
+                </div>
+            </div>
+        );
+    }
 
     if (!planning) {
         return (
