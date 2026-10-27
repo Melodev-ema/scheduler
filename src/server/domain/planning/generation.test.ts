@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
-    assembleSchedule, GenerationInput, prepareGeneration, ReadyGeneration, StoredSlot,
+    assembleSchedule, GenerationInput, prepareGeneration, ReadyGeneration, StoredSlot, withDropped,
 } from '@/server/domain/planning/generation';
 import {DEFAULT_LUNCH_BREAK} from '@/server/domain/planning/lunchBreak';
 import {ActivityInput} from '@/server/domain/planning/mergeTasks';
@@ -114,6 +114,46 @@ describe('prepareGeneration, semaine en cours', () => {
         const generation = ready({tasks, previous: [upcoming]});
 
         expect([...generation.taskIdByRef]).toEqual([['t1', 'b'], ['t2', 'c']]);
+    });
+});
+
+describe('prepareGeneration, ce qui est écarté avant le modèle', () => {
+    const MORNING_RUN: ActivityInput = {name: 'Course', days: WEEKDAYS_ONLY, startTime: '07:00', endTime: '08:00', priority: 1};
+
+    it('signale un bloc fixe dont l\'heure est déjà passée aujourd\'hui', () => {
+        const generation = ready({activities: [SPORT, MORNING_RUN]});
+
+        expect(generation.dropped).toEqual([
+            {activity: 'Course', day: 'jeudi', type: 'écartée', detail: 'bloc de 07:00 déjà passé'},
+        ]);
+    });
+
+    it('ne signale pas un bloc fixe déjà en place aujourd\'hui', () => {
+        const done = stored({day: 'jeudi', activity: 'Course', startTime: '07:00', endTime: '08:00', status: 'done'});
+
+        expect(ready({activities: [MORNING_RUN], previous: [done]}).dropped).toEqual([]);
+    });
+
+    it('ne signale rien en préparant la semaine suivante, prise à son lundi 00:00', () => {
+        expect(ready({week: 'next', activities: [MORNING_RUN]}).dropped).toEqual([]);
+    });
+
+    it('signale des séances demandées au-delà des jours possibles', () => {
+        const piano: ActivityInput = {name: 'Piano', days: ['vendredi'], timesPerWeek: 3, timeToSpend: 45};
+
+        expect(ready({activities: [piano]}).dropped).toEqual([
+            {activity: 'Piano', day: '', type: 'écartée', detail: '3 séances demandées, 1 jour possible'},
+        ]);
+    });
+
+    it('n\'ajoute aux sacrifices du modèle que ce qui a été écarté cette fois', () => {
+        const dropped = [{activity: 'Course', day: 'jeudi', type: 'écartée' as const, detail: 'bloc de 07:00 déjà passé'}];
+        const previous = [
+            {activity: 'Lecture', day: 'mardi', type: 'supprimée' as const, detail: ''},
+            {activity: 'Course', day: 'mercredi', type: 'écartée' as const, detail: 'bloc de 07:00 déjà passé'},
+        ];
+
+        expect(withDropped(previous, dropped)).toEqual([previous[0], dropped[0]]);
     });
 });
 

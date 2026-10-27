@@ -87,23 +87,28 @@ describe('buildDayWindows', () => {
         ]);
     });
 
-    it('élargit un jour ouvert par un bloc fixe sans jour coché', () => {
-        // Un bloc fixe avec days: [] est éligible à tous les jours ouverts
-        // (voir toSessionRequests) : il doit donc élargir la fenêtre de lundi,
-        // même s'il ne l'a lui-même jamais "ouvert".
-        const windows = buildDayWindows([
-            activity({days: ['lundi'], startTime: '', endTime: ''}),
-            activity({days: [], startTime: '07:00', endTime: '09:00'}),
-        ]);
-        expect(windows).toEqual([
-            {jour: 'lundi', heure_debut: '07:00', heure_fin: '18:00'},
-        ]);
+    it('ouvre les sept jours pour une activité sans jour coché', () => {
+        const windows = buildDayWindows([activity({days: []})]);
+
+        expect(windows.map((window) => window.jour))
+            .toEqual(['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']);
+        expect(windows.every((window) => window.heure_debut === '09:00' && window.heure_fin === '18:00')).toBe(true);
     });
 
-    it('n\'invente aucun jour ouvert pour une activité sans jour coché', () => {
+    it('élargit chaque jour par un bloc fixe sans jour coché, et seulement par lui les jours que rien d\'autre n\'ouvre', () => {
         const windows = buildDayWindows([
+            activity({days: ['lundi'], endTime: '', startTime: ''}),
+            activity({days: ['lundi'], startTime: '17:00', endTime: '20:00'}),
             activity({days: [], startTime: '07:00', endTime: '09:00'}),
         ]);
-        expect(windows).toEqual([]);
+
+        expect(windows[0]).toEqual({jour: 'lundi', heure_debut: '07:00', heure_fin: '20:00'});
+        expect(windows[6]).toEqual({jour: 'dimanche', heure_debut: '07:00', heure_fin: '18:00'});
+    });
+
+    it('n\'ouvre que les jours cochés quand chaque activité en coche', () => {
+        const windows = buildDayWindows([activity({days: ['mardi']}), activity({days: ['samedi']})]);
+
+        expect(windows.map((window) => window.jour)).toEqual(['mardi', 'samedi']);
     });
 });

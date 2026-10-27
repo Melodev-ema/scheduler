@@ -1,11 +1,12 @@
-import {weekdayFromDate} from './days';
-import {ActivityInput, activityToPlannable} from './mergeTasks';
+import {Weekday, weekdayFromDate} from './days';
+import {ActivityInput, activityToPlannable, PlannableActivity} from './mergeTasks';
 import {TaskInput, taskToPlannable} from './tasks';
 import {buildDayWindows, DayWindow} from './buildDayWindows';
 import {SessionRequest, toSessionRequests} from './sessions';
 import {BusySlot} from './checkSchedule';
 import {LunchBreak, numberParts} from './lunchBreak';
-import {ScheduleSlot} from './parseSchedule';
+import {Sacrifice, SacrificeType, ScheduleSlot} from './parseSchedule';
+import {parseTimeToMinutes} from './time';
 import {
     busySlotsOf, compareSlots, excludePlacedTasks, excludeTasksIn, excludeUpcomingTasks, frozenSlots, PlacedSlot,
     remainingRequests, remainingWindows, weekStartOf, withoutResentTasks,
@@ -58,6 +59,51 @@ export interface ReadyGeneration<T extends {_id: Id}, S extends StoredSlot> {
     partial: boolean;
     taskIdByRef: Map<string, T['_id']>;
     payload: string;
+    dropped: Sacrifice[];
+}
+
+const DROPPED: SacrificeType = 'écartée';
+
+function plural(count: number, word: string): string {
+    return `${count} ${word}${count > 1 ? 's' : ''}`;
+}
+
+function cappedSessions(plannable: readonly PlannableActivity[], weekRequests: readonly SessionRequest[]): Sacrifice[] {
+    return plannable.flatMap((activity, index) => {
+        const possible = weekRequests[index].sessions;
+        return activity.timesPerWeek !== null && activity.timesPerWeek > possible
+            ? [{
+                activity: activity.name,
+                day: '',
+                type: DROPPED,
+                detail: `${plural(activity.timesPerWeek, 'séance')} demandées, ${plural(possible, 'jour')} ${possible > 1 ? 'possibles' : 'possible'}`,
+            }]
+            : [];
+    });
+}
+
+function passedFixedBlocks(
+    weekRequests: readonly SessionRequest[],
+    frozen: readonly PlacedSlot[],
+    dayWindows: readonly DayWindow[],
+    today: Weekday,
+): Sacrifice[] {
+    const window = dayWindows.find((candidate) => candidate.jour === today);
+    return weekRequests.flatMap((request) => {
+        if (request.startTime === '' || !request.days.includes(today)) {
+            return [];
+        }
+        const placed = request.ref === undefined && frozen.some((slot) =>
+            slot.day === today && slot.taskId === undefined && slot.activity === request.name);
+        const passed = !window || parseTimeToMinutes(request.startTime) < parseTimeToMinutes(window.heure_debut);
+        return !placed && passed
+            ? [{activity: request.name, day: today, type: DROPPED, detail: `bloc de ${request.startTime} déjà passé`}]
+            : [];
+    });
+}
+
+export function withDropped(sacrifices: readonly Sacrifice[], dropped: readonly Sacrifice[]): Sacrifice[] {
+    return [...sacrifices.filter((sacrifice) => sacrifice.type !== DROPPED), ...dropped];
 }
 
 export type Generation<T extends {_id: Id}, S extends StoredSlot> =
@@ -123,6 +169,10 @@ export function prepareGeneration<T extends TaskInput & {_id: Id}, S extends Sto
         partial: frozen.length > 0,
         taskIdByRef,
         payload,
+        dropped: [
+            ...cappedSessions(plannable, weekRequests),
+            ...passedFixedBlocks(weekRequests, frozen, dayWindows, today),
+        ],
     };
 }
 

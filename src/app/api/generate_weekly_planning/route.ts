@@ -22,7 +22,7 @@ import Settings, {SettingsInterface} from '@/models/Settings';
 import {DEFAULT_LUNCH_BREAK, lunchBreakOf, validateLunchBreak} from '@/server/domain/planning/lunchBreak';
 import {isWeekday} from '@/server/domain/planning/days';
 import {weekStartOf} from '@/server/domain/planning/partial';
-import {assembleSchedule, planTarget, prepareGeneration} from '@/server/domain/planning/generation';
+import {assembleSchedule, planTarget, prepareGeneration, withDropped} from '@/server/domain/planning/generation';
 import {nextWeekStart, weekKeyOf} from '@/server/domain/planning/week';
 import {createRateLimiter} from '@/server/http/rateLimit';
 import {fail, invalidInput, readJsonBody, serverError} from '@/server/http/apiResponse';
@@ -130,13 +130,14 @@ export async function POST(request: NextRequest) {
                 nextWeekPrepared: prepared !== null,
             });
         }
-        const {weekWindows, weekRequests, dayWindows, requests, busy, frozen, partial, taskIdByRef, payload} = generation;
+        const {weekWindows, weekRequests, dayWindows, requests, busy, frozen, partial, taskIdByRef, payload, dropped} = generation;
 
         const weekEndDate = new Date(weekStart);
         weekEndDate.setDate(weekEndDate.getDate() + 6);
         const dates = `${weekStart.toLocaleDateString('fr')} - ${weekEndDate.toLocaleDateString('fr')}`;
 
-        async function save(replanned: ScheduleSlot[], violations: string[], sacrifices: Sacrifice[], note: string) {
+        async function save(replanned: ScheduleSlot[], violations: string[], modelSacrifices: Sacrifice[], note: string) {
+            const sacrifices = withDropped(modelSacrifices, dropped);
             // Le modèle a pu prendre deux minutes : une coche ou un verrou posé entre-temps
             // sur un créneau gardé est relu ici, pour ne pas l'écraser avec l'ancien état.
             const current = latest !== null && frozen.length > 0

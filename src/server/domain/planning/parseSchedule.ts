@@ -92,7 +92,7 @@ export function parseSchedule(raw: string): ScheduleSlot[] {
     return schedule.map(toSlot);
 }
 
-export type SacrificeType = 'supprimée' | 'raccourcie';
+export type SacrificeType = 'supprimée' | 'raccourcie' | 'écartée';
 
 /** Séance que le modèle déclare avoir supprimée ou raccourcie. Purement informatif. */
 export interface Sacrifice {

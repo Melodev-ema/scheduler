@@ -64,7 +64,7 @@ const PlannedActivitySchema = new mongoose.Schema({
 const SacrificeSchema = new mongoose.Schema({
     activity: {type: String, required: true},
     day: {type: String, default: ""},
-    type: {type: String, enum: ['supprimée', 'raccourcie'], required: true},
+    type: {type: String, enum: ['supprimée', 'raccourcie', 'écartée'], required: true},
     detail: {type: String, default: ""},
 }, {_id: false});
 

@@ -1,4 +1,4 @@
-import {sortWeekdays, Weekday} from './days';
+import {sortWeekdays, Weekday, WEEKDAYS} from './days';
 import {PlannableActivity} from './mergeTasks';
 import {formatMinutesToTime, isValidTime, parseTimeToMinutes} from './time';
 
@@ -22,9 +22,9 @@ function minutesOf(times: readonly string[]): number[] {
 export function buildDayWindows(
     activities: readonly PlannableActivity[],
 ): DayWindow[] {
-    const days = sortWeekdays([
-        ...new Set(activities.flatMap((activity) => activity.days)),
-    ]);
+    const days = activities.some((activity) => activity.days.length === 0)
+        ? [...WEEKDAYS]
+        : sortWeekdays([...new Set(activities.flatMap((activity) => activity.days))]);
 
     return days.map((day) => {
         const forDay = activities.filter(
