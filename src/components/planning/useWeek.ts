@@ -1,6 +1,6 @@
 "use client";
 
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useState, useSyncExternalStore} from "react";
 import {toast} from "react-toastify/unstyled";
 import {PlanningInterface} from "@/models/Planning";
 import {ActivityInterface} from "@/models/Activity";
@@ -8,12 +8,10 @@ import {apiService, HttpError} from "@/services/ApiService";
 import {parseWeekKey, weekKeyOf} from "@/server/domain/planning/week";
 import {formatShortDate} from "@/components/uiComponents/format";
 import {WeekData, weekDataOf} from "@/components/planning/weekData";
+import {createWeekStore} from "@/components/planning/weekStore";
 
-/**
- * Il n'y a pas de store : chaque composant garde son état local. Ce signal de
- * fenêtre est le seul lien entre eux — une génération ou une activité modifiée
- * le déclenche, et chaque `useWeek` monté recharge ses données.
- */
+const NO_ACTIVITIES: ActivityInterface[] = [];
+
 const SCHEDULER_CHANGED = "scheduler:changed";
 
 export function notifySchedulerChanged() {
@@ -57,55 +55,70 @@ export function isWeekStale(planning: PlanningInterface | null, activities: Acti
  * Planning de la semaine `week` (clé `YYYY-MM-DD` d'un lundi ; absente = la semaine
  * en cours), activités et semaines planifiées, rechargés à chaque `notifySchedulerChanged()`.
  */
+function fetchWeekData(week: string | undefined): Promise<WeekData> {
+    // Pas de planning : la route répond 404, ce n'est pas une erreur ici.
+    return Promise.allSettled([
+        apiService.get<PlanningInterface>(
+            week ? `/api/generate_weekly_planning?week=${encodeURIComponent(week)}` : "/api/generate_weekly_planning",
+        ),
+        apiService.get<{ data: ActivityInterface[] }>("/api/activity"),
+        apiService.get<{ weeks: string[] }>("/api/planning/weeks"),
+    ]).then((results) => weekDataOf(results, week));
+}
+
+const store = createWeekStore(fetchWeekData);
+let watchers = 0;
+
+function reloadWatched() {
+    store.reloadWatched();
+}
+
+function watch(week: string | undefined, listener: () => void): () => void {
+    if (watchers++ === 0) {
+        window.addEventListener(SCHEDULER_CHANGED, reloadWatched);
+    }
+    const unsubscribe = store.subscribe(week, listener);
+    return () => {
+        unsubscribe();
+        if (--watchers === 0) {
+            window.removeEventListener(SCHEDULER_CHANGED, reloadWatched);
+        }
+    };
+}
+
 export function useWeek(week?: string) {
-    const [data, setData] = useState<WeekData>({planning: null, activities: [], weeks: [], loaded: false, failed: false});
-    const [version, setVersion] = useState(0);
+    const subscribe = useCallback((listener: () => void) => watch(week, listener), [week]);
+    const data = useSyncExternalStore(subscribe, () => store.snapshot(week), () => undefined);
     const [generating, setGenerating] = useState(generationRunning);
 
     useEffect(() => {
-        let alive = true;
-        // Pas de planning : la route répond 404, ce n'est pas une erreur ici.
-        Promise.allSettled([
-            apiService.get<PlanningInterface>(
-                week ? `/api/generate_weekly_planning?week=${encodeURIComponent(week)}` : "/api/generate_weekly_planning",
-            ),
-            apiService.get<{ data: ActivityInterface[] }>("/api/activity"),
-            apiService.get<{ weeks: string[] }>("/api/planning/weeks"),
-        ]).then((results) => {
-            if (!alive) return;
-            setData(weekDataOf(results, week));
-        });
-        return () => {
-            alive = false;
-        };
-    }, [version, week]);
+        void store.load(week);
+    }, [week]);
 
     useEffect(() => {
-        const reload = () => setVersion((v) => v + 1);
         const follow = () => setGenerating(generationRunning);
-        window.addEventListener(SCHEDULER_CHANGED, reload);
         window.addEventListener(SCHEDULER_GENERATING, follow);
-        return () => {
-            window.removeEventListener(SCHEDULER_CHANGED, reload);
-            window.removeEventListener(SCHEDULER_GENERATING, follow);
-        };
+        return () => window.removeEventListener(SCHEDULER_GENERATING, follow);
     }, []);
 
     const setPlanning = useCallback((update: (planning: PlanningInterface) => PlanningInterface) => {
-        setData((previous) => previous.planning ? {...previous, planning: update(previous.planning)} : previous);
-    }, []);
+        store.update(week, update);
+    }, [week]);
 
+    const reload = useCallback(() => void store.refresh(week), [week]);
+
+    const failed = data?.failed ?? false;
     return {
-        ...data,
-        // Changer de semaine : les données de la précédente ne s'affichent pas sous le nouveau titre.
-        // Les semaines planifiées, elles, restent valables pendant le chargement.
-        loaded: data.loaded && data.week === week,
-        // Les activités se comparent à la semaine en cours seulement : une autre semaine est figée.
-        stale: !data.failed
+        planning: data?.planning ?? null,
+        activities: data?.activities ?? NO_ACTIVITIES,
+        weeks: data?.weeks ?? store.lastWeeks(),
+        loaded: data !== undefined,
+        failed,
+        stale: !failed
             && (!week || week === weekKeyOf(new Date()))
-            && isWeekStale(data.planning, data.activities),
+            && isWeekStale(data?.planning ?? null, data?.activities ?? NO_ACTIVITIES),
         generating,
-        reload: () => setVersion((v) => v + 1),
+        reload,
         setPlanning,
     };
 }
