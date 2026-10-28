@@ -25,6 +25,7 @@ import {weekStartOf} from '@/server/domain/planning/partial';
 import {assembleSchedule, planTarget, prepareGeneration, withDropped} from '@/server/domain/planning/generation';
 import {nextWeekStart, weekKeyOf} from '@/server/domain/planning/week';
 import {createRateLimiter} from '@/server/http/rateLimit';
+import {createKeyedLock} from '@/server/http/keyedLock';
 import {fail, invalidInput, readJsonBody, serverError} from '@/server/http/apiResponse';
 import {generateBodySchema, weekQuerySchema} from '@/server/http/schemas/schedule';
 import {latestPlanningOf} from '@/server/infrastructure/db/plannings';
@@ -50,6 +51,7 @@ const GENERATION_WINDOW_MS = 15 * 60 * 1000;
 
 // Instancié au chargement du module : l'état vit aussi longtemps que le processus.
 const generationLimiter = createRateLimiter(GENERATION_LIMIT, GENERATION_WINDOW_MS);
+const generationLock = createKeyedLock();
 
 export async function GET(request: NextRequest) {
     try {
@@ -72,6 +74,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    let release: (() => void) | null = null;
     try {
         await dbConnect();
 
@@ -83,6 +86,10 @@ export async function POST(request: NextRequest) {
         const {week} = parsed.data;
         const now = new Date();
         const {weekStart} = planTarget(week, now);
+        release = generationLock.tryAcquire(weekKeyOf(weekStart));
+        if (!release) {
+            return fail(409, 'Une génération de cette semaine est déjà en cours');
+        }
 
         const [activities, allTasks, settings, latest, currentWeek, preparedWeek] = await Promise.all([
             Activity.find({}).lean<ActivityInput[]>(),
@@ -267,5 +274,7 @@ export async function POST(request: NextRequest) {
         return save(slots, violations, sacrifices, note);
     } catch (error) {
         return serverError('POST /api/generate_weekly_planning', error);
+    } finally {
+        release?.();
     }
 }
