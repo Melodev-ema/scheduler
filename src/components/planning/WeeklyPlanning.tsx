@@ -17,8 +17,9 @@ import {useFocus} from "@/components/focus/focusStore";
 import {useFocusLauncher} from "@/components/focus/SwitchFocusDialog";
 import {useRouter} from "next/navigation";
 import GenerateButton from "@/components/planning/GenerateButton";
-import {useWeek} from "@/components/planning/useWeek";
-import {neighbours, weekKindOf} from "@/components/planning/weekNav";
+import {generateWeek, useWeek} from "@/components/planning/useWeek";
+import {neighbours, preparableWeek, weekKindOf} from "@/components/planning/weekNav";
+import PrepareWeekDialog from "@/components/planning/PrepareWeekDialog";
 import Spinner from "@/components/uiComponents/Spinner";
 import {BaseButton} from "@/components/uiComponents/BaseButton";
 import PriorityIcon from "@/components/uiComponents/icons/PriorityIcon";
@@ -106,8 +107,12 @@ function HideButton({onClick}: { onClick: () => void }) {
 }
 
 /** ‹ ou › autour du titre, désactivée quand aucune semaine n'est atteignable de ce côté. */
-function WeekArrow({direction, onClick}: { direction: "previous" | "next", onClick: (() => void) | null }) {
-    const label = direction === "previous" ? "Semaine précédente" : "Semaine suivante";
+function WeekArrow({direction, onClick, label: customLabel}: {
+    direction: "previous" | "next",
+    onClick: (() => void) | null,
+    label?: string,
+}) {
+    const label = customLabel ?? (direction === "previous" ? "Semaine précédente" : "Semaine suivante");
     return (
         <button
             type="button"
@@ -136,6 +141,7 @@ export default function WeeklyPlanning() {
     const {planning, loaded, failed, stale, setPlanning, reload, generating, weeks} = useWeek(shownWeek ?? undefined);
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
     const [noteOpen, setNoteOpen] = useState(false);
+    const [preparing, setPreparing] = useState<"asking" | "running" | null>(null);
     const [hidden, setHidden] = useState<Partial<Record<Dismissable, string[]>>>({});
     const focusState = useFocus().state;
     const focusLauncher = useFocusLauncher();
@@ -169,6 +175,15 @@ export default function WeeklyPlanning() {
     // Calculé au rendu : suffisant pour une page qu'on recharge à chaque action.
     const currentWeek = kind === "current";
     const {previous, next} = neighbours(weekKey, weeks, today);
+    const preparable = preparableWeek(weekKey, weeks, today);
+
+    async function prepareNextWeek() {
+        if (!preparable || preparing === "running") return;
+        setPreparing("running");
+        const outcome = await generateWeek("next");
+        setPreparing(null);
+        if (outcome.kind === "done") showWeek(preparable);
+    }
 
     /** Changer de semaine ; la semaine en cours redevient `null`, et le jour choisi sur mobile s'oublie. */
     function showWeek(key: string | null) {
@@ -196,9 +211,23 @@ export default function WeeklyPlanning() {
                     </>
                 }
             </div>
-            <WeekArrow direction="next" onClick={next ? () => showWeek(next) : null}/>
+            {next || !preparable
+                ? <WeekArrow direction="next" onClick={next ? () => showWeek(next) : null}/>
+                : <WeekArrow direction="next" label="Préparer la semaine suivante"
+                             onClick={generating ? null : () => setPreparing("asking")}/>
+            }
         </div>
     );
+
+    const prepareDialog = preparing && preparable &&
+        <PrepareWeekDialog
+            nextWeek={preparable}
+            prepared={false}
+            eyebrow="Envie d’avance ?"
+            loading={preparing === "running"}
+            onConfirm={prepareNextWeek}
+            onClose={() => setPreparing(null)}
+        />;
 
     if (!loaded) {
         return (
@@ -424,6 +453,7 @@ export default function WeeklyPlanning() {
     if (failed) {
         return (
             <div className="flex flex-col gap-6 pt-1 xl:pt-4">
+                {prepareDialog}
                 {title}
                 <div role="alert" className="flex flex-col items-start gap-3 rounded-[28px] border border-line p-6 xl:p-8">
                     <div className="ital text-[26px] leading-[30px]">Ta semaine n’a pas pu être chargée.</div>
@@ -439,6 +469,7 @@ export default function WeeklyPlanning() {
     if (!planning) {
         return (
             <div className="flex flex-col gap-6 pt-1 xl:pt-4">
+                {prepareDialog}
                 {title}
                 <div className="flex flex-col items-start gap-3 rounded-[28px] border border-line p-6 xl:p-8">
                     <div className="ital text-[26px] leading-[30px]">Ta semaine est encore toute blanche.</div>
@@ -456,6 +487,7 @@ export default function WeeklyPlanning() {
     return (
         <>
             {focusLauncher.dialog}
+            {prepareDialog}
             {/* Bureau */}
             <div className="hidden flex-col gap-4 xl:flex">
                 <div className="flex items-stretch gap-5">

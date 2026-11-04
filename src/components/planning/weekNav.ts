@@ -15,6 +15,11 @@ export function weekKindOf(key: string, now: Date): WeekKind {
  * côté, la semaine en cours comptant toujours, même sans planning. › ne va
  * jamais au-delà de la semaine suivante.
  */
+export function preparableWeek(key: string, weeks: readonly string[], now: Date): string | null {
+    const next = weekKeyOf(nextWeekStart(now));
+    return key === weekKeyOf(now) && !weeks.includes(next) ? next : null;
+}
+
 export function neighbours(key: string, weeks: readonly string[], now: Date): { previous: string | null, next: string | null } {
     const limit = weekKeyOf(nextWeekStart(now));
     const reachable = [...new Set([...weeks, weekKeyOf(now)])].filter((week) => week <= limit).sort();

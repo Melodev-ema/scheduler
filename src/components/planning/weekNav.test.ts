@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {neighbours, weekKindOf} from '@/components/planning/weekNav';
+import {neighbours, preparableWeek, weekKindOf} from '@/components/planning/weekNav';
 
 // Dimanche 18 octobre 2026, 15:47 : la semaine en cours commence le lundi 12.
 const now = new Date(2026, 9, 18, 15, 47);
@@ -35,5 +35,23 @@ describe('neighbours', () => {
 
     it('n’a rien avant le plus ancien planning', () => {
         expect(neighbours('2026-09-21', weeks, now).previous).toBeNull();
+    });
+});
+
+describe('preparableWeek', () => {
+    it('propose la semaine suivante depuis la semaine en cours quand elle n’est pas encore préparée', () => {
+        expect(preparableWeek('2026-10-12', ['2026-10-12'], now)).toBe('2026-10-19');
+    });
+
+    it('ne propose rien quand la semaine suivante est déjà préparée : la flèche y mène', () => {
+        expect(preparableWeek('2026-10-12', ['2026-10-12', '2026-10-19'], now)).toBeNull();
+    });
+
+    it('ne propose rien depuis une semaine passée', () => {
+        expect(preparableWeek('2026-09-21', ['2026-09-21'], now)).toBeNull();
+    });
+
+    it('propose la semaine suivante même quand la semaine en cours n’a pas de planning', () => {
+        expect(preparableWeek('2026-10-12', [], now)).toBe('2026-10-19');
     });
 });

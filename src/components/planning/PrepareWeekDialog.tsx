@@ -11,12 +11,13 @@ import {parseWeekKey} from "@/server/domain/planning/week";
  * Plus rien à planifier cette semaine : on propose la suivante. Si elle est
  * déjà prête, la même question devient « Regénérer ».
  */
-export default function PrepareWeekDialog({nextWeek, prepared, loading, onConfirm, onClose}: {
+export default function PrepareWeekDialog({nextWeek, prepared, loading, onConfirm, onClose, eyebrow = "Il ne reste rien à planifier cette semaine."}: {
     nextWeek: string,
     prepared: boolean,
     loading?: boolean,
     onConfirm: () => void,
     onClose: () => void,
+    eyebrow?: string,
 }) {
     const monday = parseWeekKey(nextWeek);
     const title = !monday
@@ -30,7 +31,7 @@ export default function PrepareWeekDialog({nextWeek, prepared, loading, onConfir
         <FocusSheet open onClose={() => {
             if (!loading) onClose();
         }} labelledBy="prepare-week-title">
-            <span className="eyebrow">Il ne reste rien à planifier cette semaine.</span>
+            <span className="eyebrow">{eyebrow}</span>
             <h2 id="prepare-week-title" className="m-0 text-2xl leading-[29px] font-extrabold">{title}</h2>
             <BaseButton size="large" className="h-14 w-full" onClick={onConfirm} disabled={loading} ariaBusy={loading}>
                 {loading ? <Spinner/> : <SparkIcon size={18}/>}
