@@ -11,7 +11,7 @@ la semaine.
    chaque jour, envoie les activités et ces plages au modèle, valide sa réponse puis enregistre le planning.
 3. **Suivre sa semaine** : un clic sur un créneau le marque comme fait, un second le remet à faire. La
    colonne *Déjà passé (min)* de la page *Activités* additionne les créneaux faits du planning le plus
-   récent. Elle n'est pas enregistrée mais recalculée à chaque lecture, en rapprochant créneaux et activités
+   récent de la semaine en cours. Elle n'est pas enregistrée mais recalculée à chaque lecture, en rapprochant créneaux et activités
    par leur nom. Elle repart donc de 0 à chaque nouvelle génération.
 
 Les règles imposées au modèle :
@@ -22,8 +22,11 @@ Les règles imposées au modèle :
   ne tient pas ;
 - une journée va de 09:00 à 18:00 par défaut. Un bloc fixe qui déborde l'élargit, rien ne la réduit.
 
-Chaque génération crée un nouveau planning, et l'accueil affiche le plus récent. Les précédents restent en
-base comme instantanés : modifier une activité ne réécrit pas les plannings passés.
+Chaque génération crée un nouveau planning, et l'accueil affiche le plus récent de la semaine affichée. Les
+précédents restent en base comme instantanés : modifier une activité ne réécrit pas les plannings passés.
+
+Quand il ne reste plus rien à planifier cette semaine, l'application propose de préparer la suivante. Les
+flèches ‹ › de l'accueil passent d'une semaine planifiée à l'autre ; seule la semaine en cours se coche.
 
 ## Stack
 
@@ -59,6 +62,22 @@ npm run dev
 
 L'application répond sur <http://localhost:3000>. MongoDB doit tourner avant toute requête : chaque route de
 l'API commence par s'y connecter.
+
+## Docker
+
+Un `Makefile` regroupe les commandes ; `make` seul les liste.
+
+- **Développement** : `make dev` lance `npm run dev` sur la machine, avec le MongoDB local habituel (27017).
+- **Vérification** : `make check` enchaîne le lint, les tests et le build, et échoue si une page n'est plus
+  rendue à la demande (la CSP a besoin d'un nonce par requête).
+- **Production** : `make prod` construit l'image (`Dockerfile`, sortie *standalone* de Next) et lance
+  l'application et son propre MongoDB sur <http://localhost:3000>. `make logs` suit ses logs, `make stop`
+  l'arrête, `make down` arrête tous les conteneurs sans perdre les données.
+
+Le MongoDB de Docker est une base **distincte** du MongoDB local : volume `mongo-data`, publié sur
+`127.0.0.1:27018` pour ne pas entrer en conflit avec lui. Les deux ports ne sont publiés que sur `127.0.0.1` :
+l'API n'a pas encore d'authentification. Le conteneur lit `.env` et `.env.local` au démarrage, jamais au
+build, et se connecte au MongoDB de compose quelle que soit la valeur de `MONGODB_URI`.
 
 ## Configuration
 
@@ -112,7 +131,8 @@ serveur de développement répond ensuite 500 sur toutes les routes jusqu'à son
 
 ## API
 
-Toutes les routes sont sous `/api` et échangent du JSON.
+Toutes les routes sont sous `/api` et échangent du JSON. Un corps doit être envoyé en
+`Content-Type: application/json` : sinon, il est ignoré.
 
 | Méthode  | Route                           | Rôle                                                          |
 |----------|---------------------------------|---------------------------------------------------------------|
@@ -121,14 +141,19 @@ Toutes les routes sont sous `/api` et échangent du JSON.
 | `DELETE` | `/api/activity`                 | Supprime l'activité dont l'identifiant est passé dans `index` |
 | `GET`    | `/api/activity/[id]`            | Une activité                                                  |
 | `POST`   | `/api/activity/[id]`            | Met à jour une activité                                       |
-| `GET`    | `/api/generate_weekly_planning` | Le planning le plus récent                                    |
-| `POST`   | `/api/generate_weekly_planning` | Génère un nouveau planning                                    |
+| `GET`    | `/api/generate_weekly_planning` | Le planning le plus récent d'une semaine (`?week=AAAA-MM-JJ`, un lundi ; par défaut la semaine en cours) |
+| `POST`   | `/api/generate_weekly_planning` | Génère un planning (`{week: "current" \| "next"}`, par défaut `current`) |
+| `GET`    | `/api/planning/weeks`           | Les lundis des semaines qui ont un planning                   |
 | `POST`   | `/api/schedule/status`          | Passe un créneau à `pending` ou à `done`                      |
 
 Les erreurs répondent toutes `{error}` :
 
 - **400** — entrée invalide. La réponse liste aussi les champs fautifs.
+- **403** — hôte inconnu (autre que `localhost`, `127.0.0.1` ou `[::1]`), ou écriture envoyée depuis une autre
+  origine que l'application.
 - **404** — document introuvable.
+- **409** — rien à planifier (la réponse porte alors `nextWeek` et `nextWeekPrepared`), ou créneau d'une semaine qui ne se coche ou ne se verrouille plus.
+- **413** — corps de requête annoncé au-delà de 1 Mo.
 - **429** — plus de 5 générations en 15 minutes. L'en-tête `Retry-After` indique quand réessayer.
 - **502** — le modèle a renvoyé une réponse inexploitable deux fois de suite.
 - **500** — toute autre erreur. Le détail est journalisé côté serveur, jamais renvoyé au client.
@@ -185,8 +210,9 @@ sert de test de bout en bout à `parseSchedule` et de référence pour le format
 
 ## Limites connues
 
-- **Aucune authentification.** Toutes les routes sont ouvertes, et la taille des corps de requête n'est pas
-  bornée. L'application ne doit pas être exposée sur un réseau public en l'état.
+- **Aucune authentification.** Toutes les routes sont ouvertes à quiconque joint l'application. Un site tiers
+  ouvert dans le navigateur ne peut ni y écrire ni la lire, mais l'application ne doit pas être exposée sur un
+  réseau public en l'état.
 - **L'unité de `timeToSpend` est incohérente.** Les activités l'enregistrent en minutes, mais le prompt
   annonce des heures au modèle : 90 minutes lui arrivent comme 90 heures. La corriger demande de migrer les
   données existantes et la durée par défaut des tâches externes en même temps.

@@ -1,9 +1,12 @@
 import mongoose, {Mongoose} from 'mongoose';
 import {getEnv} from '@/server/config/env';
+import {backfillWeekStart} from '@/server/infrastructure/db/plannings';
 
 interface CachedMongoose {
     conn: Mongoose | null;
     promise: Promise<Mongoose> | null;
+    /** Le rattrapage de `weekStart` n'est lancé qu'une fois par processus ; chaque requête attend la même promesse. */
+    backfill?: Promise<void>;
 }
 
 declare global {
@@ -14,17 +17,41 @@ global.mongoose = global.mongoose || {conn: null, promise: null};
 
 const cached: CachedMongoose = global.mongoose;
 
-async function dbConnect(): Promise<Mongoose> {
-    if (cached.conn) {
-        return cached.conn;
-    }
+const SERVER_SELECTION_TIMEOUT_MS = 5_000;
 
+async function connect(): Promise<Mongoose> {
     if (!cached.promise) {
-        cached.promise = mongoose.connect(getEnv().mongodbUri);
+        cached.promise = mongoose.connect(getEnv().mongodbUri, {serverSelectionTimeoutMS: SERVER_SELECTION_TIMEOUT_MS});
     }
 
-    cached.conn = await cached.promise;
+    try {
+        cached.conn = await cached.promise;
+    } catch (error) {
+        cached.promise = null;
+        throw error;
+    }
     return cached.conn;
+}
+
+function backfillOnce(): Promise<void> {
+    cached.backfill ??= backfillWeekStart()
+        .then(count => {
+            if (count > 0) {
+                console.info(`weekStart rattrapé sur ${count} planning(s)`);
+            }
+        })
+        .catch(error => {
+            // Un rattrapage raté ne doit jamais bloquer une requête ; la suivante réessaie.
+            console.error('Rattrapage de weekStart échoué', error);
+            cached.backfill = undefined;
+        });
+    return cached.backfill;
+}
+
+async function dbConnect(): Promise<Mongoose> {
+    const conn = cached.conn ?? await connect();
+    await backfillOnce();
+    return conn;
 }
 
 export default dbConnect;

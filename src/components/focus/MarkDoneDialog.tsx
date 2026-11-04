@@ -1,7 +1,7 @@
 "use client";
 
 import {useState} from "react";
-import {toast} from "react-toastify";
+import {toast} from "react-toastify/unstyled";
 import {apiService, HttpError} from "@/services/ApiService";
 import {notifySchedulerChanged} from "@/components/planning/useWeek";
 import {BaseButton} from "@/components/uiComponents/BaseButton";
@@ -38,6 +38,9 @@ export default function MarkDoneDialog({state}: { state: FocusState & { target: 
         } catch (error) {
             if (error instanceof HttpError && error.status === 404) {
                 toast.info("Ce créneau n’est plus dans ta semaine.");
+                clearFocus();
+            } else if (error instanceof HttpError && error.status === 409) {
+                toast.info("Ce créneau appartient à une semaine passée : il ne se coche plus.");
                 clearFocus();
             } else {
                 toast.error("Impossible d’enregistrer ce créneau.");

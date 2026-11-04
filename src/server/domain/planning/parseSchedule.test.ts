@@ -91,9 +91,10 @@ describe('parseSchedule', () => {
         expect(slot.ref).toBe('t1');
     });
 
-    it('ignore une référence absente, vide ou non textuelle sans lever', () => {
+    it('ignore une référence absente, nulle, vide ou non textuelle sans lever', () => {
         const slots = parseSchedule(response([
             VALID_SLOT,
+            {...VALID_SLOT, ref: null},
             {...VALID_SLOT, ref: ''},
             {...VALID_SLOT, ref: 42},
         ]));

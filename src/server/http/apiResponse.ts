@@ -1,7 +1,8 @@
 import type {ZodError} from 'zod';
 
 /**
- * Forme unique des erreurs de l'API : {error: "…"}. Le détail d'une exception
+ * Forme unique des erreurs de l'API : {error: "…"}, plus d'éventuels champs `extra`
+ * qu'un client lit pour décider de la suite. Le détail d'une exception
  * — message Mongo, réponse d'un service tiers, trace — reste côté serveur : il renseigne
  * un attaquant bien plus qu'il n'aide l'utilisatrice.
  *
@@ -10,8 +11,14 @@ import type {ZodError} from 'zod';
  * contrat des Route Handlers, et accessoirement ce qui les rend testables
  * sans serveur.
  */
-export function fail(status: number, message: string, headers?: HeadersInit): Response {
-    return Response.json({error: message}, {status, headers});
+export function fail(
+    status: number,
+    message: string,
+    headers?: HeadersInit,
+    extra?: Record<string, unknown>,
+): Response {
+    // `extra` précise l'erreur pour le client ; il ne remplace jamais son message.
+    return Response.json({...extra, error: message}, {status, headers});
 }
 
 /**
@@ -38,6 +45,34 @@ export function serverError(context: string, error: unknown): Response {
     return fail(500, 'Erreur interne du serveur');
 }
 
+export const MAX_BODY_BYTES = 1024 * 1024;
+
+function isJsonContentType(contentType: string | null): boolean {
+    return contentType?.split(';')[0].trim().toLowerCase() === 'application/json';
+}
+
+async function readTextUpTo(request: Request, maxBytes: number): Promise<string | null> {
+    if (!request.body) {
+        return '';
+    }
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+        const {done, value} = await reader.read();
+        if (done) {
+            break;
+        }
+        size += value.byteLength;
+        if (size > maxBytes) {
+            await reader.cancel();
+            return null;
+        }
+        chunks.push(value);
+    }
+    return new TextDecoder().decode(await new Blob(chunks as BlobPart[]).arrayBuffer());
+}
+
 /**
  * Corps JSON d'une requête, ou `undefined` s'il est absent ou illisible.
  *
@@ -45,9 +80,13 @@ export function serverError(context: string, error: unknown): Response {
  * valait simplement `undefined`. Sans ce rattrapage, une requête sans corps
  * remonterait en 500 au lieu du 400 que rend le schéma Zod sur `undefined`.
  */
-export async function readJsonBody(request: Request): Promise<unknown> {
+export async function readJsonBody(request: Request, maxBytes = MAX_BODY_BYTES): Promise<unknown> {
+    if (!isJsonContentType(request.headers.get('content-type'))) {
+        return undefined;
+    }
     try {
-        return await request.json();
+        const text = await readTextUpTo(request, maxBytes);
+        return text ? JSON.parse(text) : undefined;
     } catch {
         return undefined;
     }

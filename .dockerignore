@@ -1,0 +1,20 @@
+# Les secrets ne doivent jamais entrer dans l'image : ils arrivent au
+# lancement par `env_file`.
+.env*
+!.env.example
+
+node_modules
+.next
+.git
+.idea
+.claude
+.superpowers
+.DS_Store
+*.tsbuildinfo
+coverage
+docs
+_private
+CLAUDE.md
+Dockerfile
+compose.yaml
+Makefile

@@ -1,6 +1,7 @@
 import type {NextRequest} from 'next/server';
 import Activity, {ActivityInterface} from '@/models/Activity';
-import Planning from '@/models/Planning';
+import {weekStartOf} from '@/server/domain/planning/partial';
+import {latestPlanningOf} from '@/server/infrastructure/db/plannings';
 import dbConnect from '@/server/infrastructure/db/connection';
 import {minutesDoneByActivity, SlotProgress} from '@/server/domain/planning/timeSpent';
 import {activityInputSchema, deleteActivitySchema} from '@/server/http/schemas/activity';
@@ -15,7 +16,7 @@ export async function GET() {
             // Le dernier planning est la semaine en cours, celui de l'accueil. Les
             // précédents sont des régénérations ou des semaines passées : les
             // additionner compterait les mêmes créneaux plusieurs fois.
-            Planning.findOne().sort({timestamp: -1}).select('schedule').lean<{schedule: SlotProgress[]}>(),
+            latestPlanningOf(weekStartOf(new Date())).select('schedule').lean<{schedule: SlotProgress[]}>(),
         ]);
 
         // Calculé plutôt que stocké : décocher un créneau fait redescendre le

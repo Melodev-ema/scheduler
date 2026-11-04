@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect, useState} from "react";
-import {toast} from "react-toastify";
+import {toast} from "react-toastify/unstyled";
 import {ActivityInterface} from "@/models/Activity";
 import {apiService} from "@/services/ApiService";
 import ActivityCard, {ActivityPatch} from "@/components/activity/ActivityCard";

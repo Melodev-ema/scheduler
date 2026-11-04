@@ -1,15 +1,21 @@
 import {NextResponse} from 'next/server';
 import type {NextRequest} from 'next/server';
+import {guardRequest} from '@/server/http/requestGuard';
 
 /**
  * Point de passage par requête. Next 16 a renommé `middleware.ts` en
  * `proxy.ts` : même mécanique, autre nom de fichier et d'export.
- *
- * Il ne fait qu'une chose aujourd'hui : tirer un nonce et poser la CSP. C'est
- * aussi ici que viendra le guard d'authentification, quand la phase qui le
- * porte sera écrite — il faudra alors élargir le `matcher` à `/api`.
  */
 export function proxy(request: NextRequest) {
+    const refusal = guardRequest(request);
+    if (refusal) {
+        return refusal;
+    }
+
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+        return NextResponse.next();
+    }
+
     const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
 
     // React utilise `eval` en développement pour reconstruire les piles
@@ -17,13 +23,20 @@ export function proxy(request: NextRequest) {
     // en production.
     const isDev = process.env.NODE_ENV === 'development';
 
+    // L'overlay de développement de Next injecte ses `<style>` sans nonce.
+    // `'unsafe-inline'` est ignoré dès qu'un nonce figure dans la directive :
+    // en développement, il remplace donc le nonce au lieu de s'y ajouter.
+    // Conséquence : un style injecté par l'app (l'entrée par défaut de
+    // `react-toastify`, par exemple) n'est plus signalé qu'en production.
+    const styleSrc = isDev ? "'unsafe-inline'" : `'nonce-${nonce}'`;
+
     // `upgrade-insecure-requests` est délibérément absent : l'instance est
     // servie en http sur localhost, et cette directive réécrirait ses propres
     // requêtes en https. À rajouter le jour du déploiement en HTTPS.
     const csp = `
         default-src 'self';
         script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''};
-        style-src 'self' 'nonce-${nonce}';
+        style-src 'self' ${styleSrc};
         img-src 'self' blob: data:;
         font-src 'self';
         connect-src 'self';
@@ -56,5 +69,6 @@ export const config = {
                 {type: 'header', key: 'purpose', value: 'prefetch'},
             ],
         },
+        '/api/:path*',
     ],
 };

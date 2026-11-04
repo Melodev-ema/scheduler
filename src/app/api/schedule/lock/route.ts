@@ -3,6 +3,8 @@ import {Types} from 'mongoose';
 import dbConnect from '@/server/infrastructure/db/connection';
 import Planning from '@/models/Planning';
 import {scheduleLockSchema} from '@/server/http/schemas/schedule';
+import {planningWeekOf} from '@/server/domain/planning/week';
+import {weekStartOf} from '@/server/domain/planning/partial';
 import {fail, invalidInput, readJsonBody, serverError} from '@/server/http/apiResponse';
 
 export async function POST(request: NextRequest) {
@@ -15,6 +17,15 @@ export async function POST(request: NextRequest) {
         }
 
         const {planningId, ids, locked} = parsed.data;
+        // Une semaine passée ne se verrouille plus ; la courante et la préparée, si.
+        const target = await Planning.findById(planningId).select('weekStart timestamp').lean();
+        if (!target) {
+            return fail(404, 'Créneau introuvable');
+        }
+        if (planningWeekOf(target).getTime() < weekStartOf(new Date()).getTime()) {
+            return fail(409, 'Une semaine passée ne se verrouille plus');
+        }
+
         // Les arrayFilters ne sont pas toujours convertis par Mongoose : on passe des ObjectId.
         const objectIds = ids.map((id) => new Types.ObjectId(id));
 

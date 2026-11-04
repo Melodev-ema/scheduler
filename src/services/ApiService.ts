@@ -27,10 +27,11 @@ export interface ApiServiceInterface {
 
 /**
  * Même message qu'avant, plus le statut — un appelant peut distinguer un 409
- * d'une panne — et `detail`, le champ `error` que renvoie l'API, s'il y en a un.
+ * d'une panne — et `detail`, le champ `error` que renvoie l'API, s'il y en a un ;
+ * `body` est le corps JSON entier de l'erreur (un 409 y porte des champs en plus).
  */
 export class HttpError extends Error {
-    constructor(readonly status: number, message: string, readonly detail?: string) {
+    constructor(readonly status: number, message: string, readonly detail?: string, readonly body?: unknown) {
         super(message);
         this.name = 'HttpError';
     }
@@ -58,26 +59,27 @@ export class ApiService {
             ...headers,
         };
 
-        try {
-            const response = await fetch(url, {
-                method,
-                headers: defaultHeaders,
-                body: contentBody,
-                signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
-            });
+        // Pas de console.error ici : un 409 ou un 404 fait partie du contrat que
+        // l'appelant traite, et l'overlay de dev afficherait chacun comme une erreur.
+        const response = await fetch(url, {
+            method,
+            headers: defaultHeaders,
+            body: contentBody,
+            signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+        });
 
-            if (!response.ok) {
-                const detail = await response.json()
-                    .then((body: { error?: unknown }) => typeof body?.error === 'string' ? body.error : undefined)
-                    .catch(() => undefined);
-                throw new HttpError(response.status, `HTTP error! status: ${response.status} ${response.statusText}`, detail);
-            }
-
-            return (await response.json()) as Res;
-        } catch (error) {
-            console.error('Error:', error);
-            throw error;
+        if (!response.ok) {
+            const errorBody: unknown = await response.json().catch(() => undefined);
+            const error = (errorBody as { error?: unknown } | null | undefined)?.error;
+            throw new HttpError(
+                response.status,
+                `HTTP error! status: ${response.status} ${response.statusText}`,
+                typeof error === 'string' ? error : undefined,
+                errorBody,
+            );
         }
+
+        return (await response.json()) as Res;
     }
 
     public async get<Res>(endpoint: string, headers?: Record<string, string>): Promise<Res> {

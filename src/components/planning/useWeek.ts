@@ -1,16 +1,17 @@
 "use client";
 
-import {useCallback, useEffect, useState} from "react";
-import {toast} from "react-toastify";
+import {useCallback, useEffect, useState, useSyncExternalStore} from "react";
+import {toast} from "react-toastify/unstyled";
 import {PlanningInterface} from "@/models/Planning";
 import {ActivityInterface} from "@/models/Activity";
 import {apiService, HttpError} from "@/services/ApiService";
+import {parseWeekKey, weekKeyOf} from "@/server/domain/planning/week";
+import {formatShortDate} from "@/components/uiComponents/format";
+import {WeekData, weekDataOf} from "@/components/planning/weekData";
+import {createWeekStore} from "@/components/planning/weekStore";
 
-/**
- * Il n'y a pas de store : chaque composant garde son état local. Ce signal de
- * fenêtre est le seul lien entre eux — une génération ou une activité modifiée
- * le déclenche, et chaque `useWeek` monté recharge ses données.
- */
+const NO_ACTIVITIES: ActivityInterface[] = [];
+
 const SCHEDULER_CHANGED = "scheduler:changed";
 
 export function notifySchedulerChanged() {
@@ -49,57 +50,75 @@ export function isWeekStale(planning: PlanningInterface | null, activities: Acti
     return [...current].some((name) => !planned.has(name));
 }
 
-interface WeekData {
-    planning: PlanningInterface | null;
-    activities: ActivityInterface[];
-    loaded: boolean;
+
+/**
+ * Planning de la semaine `week` (clé `YYYY-MM-DD` d'un lundi ; absente = la semaine
+ * en cours), activités et semaines planifiées, rechargés à chaque `notifySchedulerChanged()`.
+ */
+function fetchWeekData(week: string | undefined): Promise<WeekData> {
+    // Pas de planning : la route répond 404, ce n'est pas une erreur ici.
+    return Promise.allSettled([
+        apiService.get<PlanningInterface>(
+            week ? `/api/generate_weekly_planning?week=${encodeURIComponent(week)}` : "/api/generate_weekly_planning",
+        ),
+        apiService.get<{ data: ActivityInterface[] }>("/api/activity"),
+        apiService.get<{ weeks: string[] }>("/api/planning/weeks"),
+    ]).then((results) => weekDataOf(results, week));
 }
 
-/** Dernier planning et activités, rechargés à chaque `notifySchedulerChanged()`. */
-export function useWeek() {
-    const [data, setData] = useState<WeekData>({planning: null, activities: [], loaded: false});
-    const [version, setVersion] = useState(0);
+const store = createWeekStore(fetchWeekData);
+let watchers = 0;
+
+function reloadWatched() {
+    store.reloadWatched();
+}
+
+function watch(week: string | undefined, listener: () => void): () => void {
+    if (watchers++ === 0) {
+        window.addEventListener(SCHEDULER_CHANGED, reloadWatched);
+    }
+    const unsubscribe = store.subscribe(week, listener);
+    return () => {
+        unsubscribe();
+        if (--watchers === 0) {
+            window.removeEventListener(SCHEDULER_CHANGED, reloadWatched);
+        }
+    };
+}
+
+export function useWeek(week?: string) {
+    const subscribe = useCallback((listener: () => void) => watch(week, listener), [week]);
+    const data = useSyncExternalStore(subscribe, () => store.snapshot(week), () => undefined);
     const [generating, setGenerating] = useState(generationRunning);
 
     useEffect(() => {
-        let alive = true;
-        // Pas de planning : la route répond 404, ce n'est pas une erreur ici.
-        Promise.allSettled([
-            apiService.get<PlanningInterface>("/api/generate_weekly_planning"),
-            apiService.get<{ data: ActivityInterface[] }>("/api/activity"),
-        ]).then(([planning, activities]) => {
-            if (!alive) return;
-            setData({
-                planning: planning.status === "fulfilled" ? planning.value : null,
-                activities: activities.status === "fulfilled" ? activities.value.data : [],
-                loaded: true,
-            });
-        });
-        return () => {
-            alive = false;
-        };
-    }, [version]);
+        void store.load(week);
+    }, [week]);
 
     useEffect(() => {
-        const reload = () => setVersion((v) => v + 1);
         const follow = () => setGenerating(generationRunning);
-        window.addEventListener(SCHEDULER_CHANGED, reload);
         window.addEventListener(SCHEDULER_GENERATING, follow);
-        return () => {
-            window.removeEventListener(SCHEDULER_CHANGED, reload);
-            window.removeEventListener(SCHEDULER_GENERATING, follow);
-        };
+        return () => window.removeEventListener(SCHEDULER_GENERATING, follow);
     }, []);
 
     const setPlanning = useCallback((update: (planning: PlanningInterface) => PlanningInterface) => {
-        setData((previous) => previous.planning ? {...previous, planning: update(previous.planning)} : previous);
-    }, []);
+        store.update(week, update);
+    }, [week]);
 
+    const reload = useCallback(() => void store.refresh(week), [week]);
+
+    const failed = data?.failed ?? false;
     return {
-        ...data,
-        stale: isWeekStale(data.planning, data.activities),
+        planning: data?.planning ?? null,
+        activities: data?.activities ?? NO_ACTIVITIES,
+        weeks: data?.weeks ?? store.lastWeeks(),
+        loaded: data !== undefined,
+        failed,
+        stale: !failed
+            && (!week || week === weekKeyOf(new Date()))
+            && isWeekStale(data?.planning ?? null, data?.activities ?? NO_ACTIVITIES),
         generating,
-        reload: () => setVersion((v) => v + 1),
+        reload,
         setPlanning,
     };
 }
@@ -110,29 +129,41 @@ export function useWeek() {
  */
 const GENERATION_TIMEOUT_MS = 150 * 1000;
 
+export type GenerationOutcome =
+    | { kind: "done" }
+    | { kind: "failed" }
+    | { kind: "nothing-left", nextWeek: string, prepared: boolean };
+
 /** Lance une génération, prévient l'utilisateur, puis signale le changement. */
-export async function generateWeek(): Promise<boolean> {
+export async function generateWeek(week: "current" | "next" = "current"): Promise<GenerationOutcome> {
     setGenerationRunning(true);
     try {
-        const result = await apiService.post<Record<string, never>, { violations: string[], partial?: boolean }>(
-            "/api/generate_weekly_planning", {}, undefined, GENERATION_TIMEOUT_MS,
+        const result = await apiService.post<{ week: string }, { violations: string[], partial?: boolean, week?: string }>(
+            "/api/generate_weekly_planning", {week}, undefined, GENERATION_TIMEOUT_MS,
         );
+        const monday = result.week ? parseWeekKey(result.week) : null;
         if (result.violations && result.violations.length > 0) {
             toast.warning("Ta semaine est prête, mais certaines règles ne sont pas respectées.");
+        } else if (week === "next" && monday) {
+            toast.success(`Ta semaine du ${formatShortDate(monday)} est prête.`);
         } else {
             toast.success(result.partial ? "Le reste de ta semaine est replanifié." : "Ta semaine est prête.");
         }
         notifySchedulerChanged();
-        return true;
+        return {kind: "done"};
     } catch (error) {
         if (error instanceof HttpError && error.status === 409) {
+            const body = error.body as { nextWeek?: unknown, nextWeekPrepared?: unknown } | undefined;
+            if (typeof body?.nextWeek === "string") {
+                return {kind: "nothing-left", nextWeek: body.nextWeek, prepared: body.nextWeekPrepared === true};
+            }
             toast.info(error.detail ? `${error.detail}.` : "Il ne reste rien à planifier cette semaine.");
-            return false;
+            return {kind: "failed"};
         }
         toast.error(error instanceof DOMException && error.name === "TimeoutError"
             ? "La génération prend trop de temps. Réessaie dans quelques minutes."
             : "La génération a échoué. Réessaie dans quelques minutes.");
-        return false;
+        return {kind: "failed"};
     } finally {
         setGenerationRunning(false);
     }

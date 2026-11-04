@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect, useState} from "react";
-import {toast} from "react-toastify";
+import {toast} from "react-toastify/unstyled";
 import {apiService} from "@/services/ApiService";
 import {BaseButton} from "@/components/uiComponents/BaseButton";
 import {DEFAULT_LUNCH_BREAK, LunchBreak, validateLunchBreak} from "@/server/domain/planning/lunchBreak";

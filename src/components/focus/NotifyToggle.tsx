@@ -1,6 +1,6 @@
 "use client";
 
-import {toast} from "react-toastify";
+import {toast} from "react-toastify/unstyled";
 import {BellIcon} from "@/components/uiComponents/icons/icons";
 import {disableNotifications, enableNotifications, useNotifyStatus} from "@/components/focus/notify";
 

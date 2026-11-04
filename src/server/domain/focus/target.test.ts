@@ -40,6 +40,13 @@ describe('canFocus', () => {
         expect(canFocus(slot({endTime: '10:01'}), PLANNING, NOW)).toBe(true);
     });
 
+    it('juge la semaine sur weekStart plutôt que sur timestamp', () => {
+        // Planning de la semaine suivante, généré le dimanche 18 octobre.
+        const next = {...PLANNING, weekStart: new Date(2026, 9, 19), timestamp: new Date(2026, 9, 18)};
+        expect(canFocus(slot({day: 'dimanche'}), next, new Date(2026, 9, 18, 10, 0))).toBe(false);
+        expect(canFocus(slot({day: 'lundi', startTime: '11:00', endTime: '12:00'}), next, new Date(2026, 9, 19, 10, 0))).toBe(true);
+    });
+
     it('refuse une heure illisible', () => {
         expect(canFocus(slot({endTime: '25:00'}), PLANNING, NOW)).toBe(false);
     });
